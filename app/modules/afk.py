@@ -44,7 +44,7 @@ async def maybe_reply_afk(client: object, event: object) -> None:
 
 @command(name="afkai", category="AI / режимы", description="AI-автоответчик во время AFK, только личные чаты.", usage=".afkai on|off")
 async def afk_ai(context: object) -> None:
-    value = context.args and context.args[0].lower()
+    value = context.args[0].lower() if context.args else ""
     if value not in {"on", "off"}:
         await context.edit("⚠️ Использование: .afkai on или .afkai off"); return
     await context.services.settings.set(context.user_id, "afk_ai", value == "on")

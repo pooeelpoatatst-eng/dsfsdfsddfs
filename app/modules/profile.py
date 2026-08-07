@@ -4,6 +4,7 @@ import base64
 from io import BytesIO
 
 from telethon.tl import functions, types
+from PIL import Image
 
 from app.userbot.registry import command
 
@@ -22,11 +23,16 @@ async def target_entity(context: object) -> object | None:
 
 async def set_avatar(client: object, raw: bytes | None) -> None:
     photos = await client(functions.photos.GetUserPhotosRequest(user_id="me", offset=0, max_id=0, limit=100))
+    if raw:
+        # Telegram rejects byte uploads without an image extension. Re-encode
+        # every source format as JPEG and name the upload explicitly.
+        image = Image.open(BytesIO(raw)).convert("RGB")
+        image.thumbnail((1280, 1280))
+        jpeg = BytesIO(); image.save(jpeg, "JPEG", quality=92)
+        uploaded = await client.upload_file(jpeg.getvalue(), file_name="profile.jpg")
+        await client(functions.photos.UploadProfilePhotoRequest(file=uploaded))
     if photos.photos:
         await client(functions.photos.DeletePhotosRequest(id=[types.InputPhoto(id=p.id, access_hash=p.access_hash, file_reference=p.file_reference) for p in photos.photos]))
-    if raw:
-        uploaded = await client.upload_file(raw)
-        await client(functions.photos.UploadProfilePhotoRequest(file=uploaded))
 
 
 @command(name="clone", category="Профиль", description="Скопировать имя, bio и аватар reply-пользователя.", usage=".clone [@username] или reply")

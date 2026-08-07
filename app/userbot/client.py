@@ -97,7 +97,12 @@ class UserClient:
         except Exception:
             error_id = f"{event.id:X}{self.owner_id:X}"[-10:]
             logger.exception("command_failed owner_id=%s command=%s error_id=%s", self.owner_id, parsed.name, error_id)
-            await context.edit(f"⚠️ Ошибка команды `.{parsed.name}`. ID: {error_id}")
+            try:
+                await context.edit(f"⚠️ Ошибка команды `.{parsed.name}`. ID: {error_id}")
+            except Exception:
+                # Commands which delete their source message cannot edit an
+                # error into it; retain the original exception in logs only.
+                logger.exception("command_error_message_failed error_id=%s", error_id)
 
     async def _transform(self, event: Any, text: str) -> None:
         active = await self.mode_manager.active(event.chat_id)
