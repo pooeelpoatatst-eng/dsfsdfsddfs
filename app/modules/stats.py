@@ -15,26 +15,30 @@ def display_name(sender: object, fallback: int) -> str:
     return (getattr(sender, "first_name", None) or getattr(sender, "title", None) or str(fallback)).replace("\n", " ")[:24]
 
 
-@command(name="chatstats", aliases=["stats"], category="Чаты", description="Статистика последних сообщений чата.", usage=".chatstats [50-500]")
+@command(name="chatstats", aliases=["stats"], category="Чаты", description="Полная статистика сообщений текущего чата.", usage=".chatstats [N]")
 async def chatstats(context: object) -> None:
-    try: limit = min(max(int(context.args[0]), 20), 500) if context.args else 200
-    except ValueError: await context.edit("⚠️ .chatstats 200 (от 20 до 500)"); return
-    messages = []
-    async for message in context.event.client.iter_messages(context.chat_id, limit=limit):
-        if message.raw_text and message.sender_id:
-            messages.append(message)
-    if not messages:
-        await context.edit("⚠️ В последних сообщениях нет текста."); return
-    counts: Counter[int] = Counter(message.sender_id for message in messages)
+    try: limit = int(context.args[0]) if context.args else None
+    except ValueError: await context.edit("⚠️ .chatstats или .chatstats 500"); return
+    if limit is not None and limit < 1:
+        await context.edit("⚠️ Число должно быть больше нуля."); return
+    await context.edit("📊 считаю всю историю чата...")
+    total = 0
+    counts: Counter[int] = Counter()
     chars: defaultdict[int, int] = defaultdict(int)
     words: Counter[str] = Counter()
-    names: dict[int, str] = {}
-    for message in messages:
+    async for message in context.event.client.iter_messages(context.chat_id, limit=limit):
+        if not message.raw_text or not message.sender_id: continue
+        total += 1
+        counts[message.sender_id] += 1
         chars[message.sender_id] += len(message.raw_text)
-        names[message.sender_id] = display_name(await message.get_sender(), message.sender_id)
         words.update(word.lower() for word in re.findall(r"[\wа-яё]{3,}", message.raw_text, re.IGNORECASE) if word.lower() not in STOP_WORDS)
-    total = len(messages)
+    if not total:
+        await context.edit("⚠️ В последних сообщениях нет текста."); return
+    names: dict[int, str] = {}
     leaders = counts.most_common(5)
+    for user_id, _ in leaders:
+        try: names[user_id] = display_name(await context.event.client.get_entity(user_id), user_id)
+        except ValueError: names[user_id] = str(user_id)
     rows = [f"📊 chat stats · {total} сообщений"]
     for user_id, count in leaders:
         average = chars[user_id] // count

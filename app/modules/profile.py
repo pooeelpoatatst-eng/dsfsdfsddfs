@@ -48,10 +48,23 @@ async def clone(context: object) -> None:
         photo = await context.event.client.download_profile_photo("me", file=bytes)
         old = {"first_name": me.first_name or "", "last_name": me.last_name or "", "about": own_full.full_user.about or "", "photo": base64.b64encode(photo).decode() if photo and len(photo) <= MAX_AVATAR_BYTES else None}
         await settings.set(context.user_id, "profile_backup", old)
-    full = await context.event.client(functions.users.GetFullUserRequest(target))
-    # `target` can be a locally renamed contact. FullUser contains Telegram's
-    # actual account name instead of the name saved in the owner's contacts.
-    actual = full.users[0]
+    local_first, local_last, phone = target.first_name or "", target.last_name or "", getattr(target, "phone", "") or ""
+    # Telegram normally returns a contact's local label (for example,
+    # "Буряточка") in every User response. Temporarily removing the contact
+    # forces Telegram to return the account owner's actual public name; then
+    # restore the original contact label immediately.
+    restore_contact = bool(getattr(target, "contact", False))
+    actual = target
+    try:
+        if restore_contact:
+            await context.event.client(functions.contacts.DeleteContactsRequest(id=[target]))
+        full = await context.event.client(functions.users.GetFullUserRequest(target))
+        actual = full.users[0]
+    finally:
+        if restore_contact:
+            await context.event.client(functions.contacts.AddContactRequest(
+                id=target, first_name=local_first, last_name=local_last, phone=phone, add_phone_privacy_exception=False
+            ))
     about = (full.full_user.about or "")[:70]
     await context.event.client(functions.account.UpdateProfileRequest(first_name=(actual.first_name or "")[:64], last_name=(actual.last_name or "")[:64], about=about))
     photo = await context.event.client.download_profile_photo(target, file=bytes)
@@ -77,10 +90,18 @@ async def name(context: object) -> None:
     await context.event.client(functions.account.UpdateProfileRequest(first_name=context.args[0][:64], last_name=" ".join(context.args[1:])[:64]))
     await context.delete()
 
-@command(name="bio", category="Профиль", description="Изменить описание профиля.", usage=".bio <text>")
+@command(name="bio", category="Профиль", description="Изменить или вернуть описание профиля.", usage=".bio <text> | .bio reset")
 async def bio(context: object) -> None:
     text = context.raw_args.strip()
+    if text.lower() == "reset":
+        previous = await context.services.settings.get(context.user_id, "bio_backup")
+        if previous is None:
+            await context.edit("⚠️ Старое bio не сохранено. Оно сохраняется при следующем .bio."); return
+        await context.event.client(functions.account.UpdateProfileRequest(about=previous))
+        await context.delete(); return
     if not text:
         await context.edit("⚠️ .bio текст"); return
+    current = await context.event.client(functions.users.GetFullUserRequest("me"))
+    await context.services.settings.set(context.user_id, "bio_backup", current.full_user.about or "")
     await context.event.client(functions.account.UpdateProfileRequest(about=text[:70]))
     await context.edit("✅ bio обновлено")
