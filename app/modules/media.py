@@ -36,9 +36,9 @@ async def demot(context: object) -> None:
     draw.text(((width - (title_box[2] - title_box[0])) // 2, source.height + 70), title.strip()[:80], fill="white", font=title_font)
     subtitle_box = draw.textbbox((0, 0), subtitle.strip()[:120], font=sub_font)
     draw.text(((width - (subtitle_box[2] - subtitle_box[0])) // 2, source.height + 130), subtitle.strip()[:120], fill="#d0d0d0", font=sub_font)
-    result = BytesIO(); canvas.save(result, "JPEG", quality=92)
+    result = BytesIO(); result.name = "demotivator.jpg"; canvas.save(result, "JPEG", quality=92); result.seek(0)
     await context.delete()
     message = await context.event.client.send_file(
-        context.chat_id, result.getvalue(), file_name="demotivator.jpg", force_document=False, reply_to=reply.id
+        context.chat_id, result, force_document=False, reply_to=reply.id
     )
     context.client.mark_internal(message)

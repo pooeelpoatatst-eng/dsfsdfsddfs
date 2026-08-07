@@ -49,8 +49,11 @@ async def clone(context: object) -> None:
         old = {"first_name": me.first_name or "", "last_name": me.last_name or "", "about": own_full.full_user.about or "", "photo": base64.b64encode(photo).decode() if photo and len(photo) <= MAX_AVATAR_BYTES else None}
         await settings.set(context.user_id, "profile_backup", old)
     full = await context.event.client(functions.users.GetFullUserRequest(target))
+    # `target` can be a locally renamed contact. FullUser contains Telegram's
+    # actual account name instead of the name saved in the owner's contacts.
+    actual = full.users[0]
     about = (full.full_user.about or "")[:70]
-    await context.event.client(functions.account.UpdateProfileRequest(first_name=(target.first_name or "")[:64], last_name=(target.last_name or "")[:64], about=about))
+    await context.event.client(functions.account.UpdateProfileRequest(first_name=(actual.first_name or "")[:64], last_name=(actual.last_name or "")[:64], about=about))
     photo = await context.event.client.download_profile_photo(target, file=bytes)
     if photo and len(photo) <= MAX_AVATAR_BYTES:
         await set_avatar(context.event.client, photo)
@@ -76,5 +79,8 @@ async def name(context: object) -> None:
 
 @command(name="bio", category="Профиль", description="Изменить описание профиля.", usage=".bio <text>")
 async def bio(context: object) -> None:
-    await context.event.client(functions.account.UpdateProfileRequest(about=context.raw_args[:70]))
-    await context.delete()
+    text = context.raw_args.strip()
+    if not text:
+        await context.edit("⚠️ .bio текст"); return
+    await context.event.client(functions.account.UpdateProfileRequest(about=text[:70]))
+    await context.edit("✅ bio обновлено")

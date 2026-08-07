@@ -95,19 +95,22 @@ async def loading(context: object) -> None:
 
 @command(name="heart", category="Анимации", description="Анимация сердца.", usage=".heart")
 async def heart(context: object) -> None:
-    small = """    🩷   🩷
-  🩷🩷 🩷🩷
+    small = """  🩷🩷   🩷🩷
+ 🩷🩷🩷 🩷🩷🩷
+  🩷🩷🩷🩷🩷
+   🩷🩷🩷🩷
     🩷🩷🩷
-      🩷🩷
-        🩷"""
-    large = """     💗💗   💗💗
-  💗💗💗💗 💗💗💗💗
- 💗💗💗💗💗💗💗💗💗💗
+     🩷🩷
+      🩷"""
+    large = """   💗💗💗     💗💗💗
+ 💗💗💗💗💗 💗💗💗💗💗
+💗💗💗💗💗💗💗💗💗💗💗💗💗
+ 💗💗💗💗💗💗💗💗💗💗💗
   💗💗💗💗💗💗💗💗💗
-    💗💗💗💗💗💗💗
-      💗💗💗💗💗
-        💗💗💗
-          💗"""
+   💗💗💗💗💗💗💗
+    💗💗💗💗💗
+     💗💗💗
+      💗"""
     for frame in (small, large, small, large, small, large, "💖"):
         await context.edit(frame)
         await asyncio.sleep(1.4)
