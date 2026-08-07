@@ -20,6 +20,13 @@ def cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Cancel", callback_data="auth:cancel")]])
 
 
+def qr_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Enter phone code instead", callback_data="auth:phone")],
+        [InlineKeyboardButton(text="❌ Cancel", callback_data="auth:cancel")],
+    ])
+
+
 def disconnect_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Disconnect from service", callback_data="logout:forget")],

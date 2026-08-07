@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 import logging
 import re
 from dataclasses import dataclass
@@ -10,12 +11,14 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile
+import qrcode
 from telethon.errors import (PhoneCodeExpiredError, PhoneCodeInvalidError, PhoneNumberInvalidError,
                              SessionPasswordNeededError, PasswordHashInvalidError)
 from telethon.sessions import StringSession
 
 from app.constants import DEFAULT_MODULES
-from app.control_bot.keyboards import cancel_keyboard, disconnect_keyboard, home_keyboard
+from app.control_bot.keyboards import cancel_keyboard, disconnect_keyboard, home_keyboard, qr_keyboard
 from app.control_bot.states import LoginState
 from app.database.repositories import ModeRepository, SettingsRepository, UsageRepository
 
@@ -26,9 +29,10 @@ PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
 @dataclass
 class PendingLogin:
     client: object
-    phone: str
-    phone_code_hash: str
+    phone: str | None = None
+    phone_code_hash: str | None = None
     attempts: int = 0
+    wait_task: asyncio.Task[None] | None = None
 
 
 def create_router(container: object) -> Router:
@@ -48,6 +52,9 @@ def create_router(container: object) -> Router:
 
     async def cleanup_auth(control_id: int, state: FSMContext) -> None:
         pending = container.temp_auth.pop(control_id, None)
+        current_task = asyncio.current_task()
+        if pending and pending.wait_task and pending.wait_task is not current_task:
+            pending.wait_task.cancel()
         if pending:
             try: await pending.client.disconnect()
             except Exception: pass
@@ -71,13 +78,70 @@ def create_router(container: object) -> Router:
         text, connected = await menu_text(callback.from_user.id)
         await callback.message.edit_text(text, reply_markup=home_keyboard(connected)); await callback.answer()
 
+    async def complete_login(control_id: int, message: Message, state: FSMContext, pending: PendingLogin) -> None:
+        me = await pending.client.get_me()
+        session = StringSession.save(pending.client.session)
+        try:
+            await container.users.connect(control_id, me.id, me.username, me.first_name, container.crypto.encrypt(session))
+            await container.manager.start_user(control_id, preconnected_client=pending.client, session=session, account_id=me.id)
+        except ValueError:
+            await pending.client.disconnect(); await cleanup_auth(control_id, state)
+            await message.answer("⚠️ Этот Telegram аккаунт уже подключён."); return
+        await container.users.audit(control_id, "authorization_successful")
+        container.temp_auth.pop(control_id, None)
+        await state.clear()
+        await message.answer("✅ Telegram аккаунт подключён. Userbot уже online.")
+        await show_menu(message, control_id)
+
+    async def wait_for_qr(control_id: int, message: Message, state: FSMContext, pending: PendingLogin, login: object) -> None:
+        try:
+            await login.wait(timeout=180)
+        except asyncio.TimeoutError:
+            if container.temp_auth.get(control_id) is pending:
+                await cleanup_auth(control_id, state)
+                await message.answer("⌛ QR-код истёк. Нажми Connect Telegram снова.")
+        except SessionPasswordNeededError:
+            if container.temp_auth.get(control_id) is pending:
+                await state.set_state(LoginState.password)
+                await message.answer("🔐 На аккаунте включена 2FA. Отправь пароль.", reply_markup=cancel_keyboard())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("qr_login_failed user=%s", control_id)
+            if container.temp_auth.get(control_id) is pending:
+                await cleanup_auth(control_id, state)
+                await message.answer("⚠️ Не удалось завершить QR-вход. Повтори позже.")
+        else:
+            if container.temp_auth.get(control_id) is pending:
+                await complete_login(control_id, message, state, pending)
+
     @router.callback_query(F.data == "auth:start")
     async def auth_start(callback: CallbackQuery, state: FSMContext) -> None:
         user = await container.users.ensure(callback.from_user.id)
         if user.connected:
             await callback.answer("Сначала отключи текущий аккаунт.", show_alert=True); return
+        client = container.factory.create_temporary_login_client()
+        try:
+            await client.connect()
+            login = await client.qr_login()
+        except Exception:
+            logger.exception("qr_login_start_failed user=%s", callback.from_user.id)
+            await client.disconnect(); await callback.answer("Не удалось создать QR-код.", show_alert=True); return
+        image = qrcode.make(login.url)
+        buffer = BytesIO(); image.save(buffer, format="PNG")
+        pending = PendingLogin(client)
+        container.temp_auth[callback.from_user.id] = pending
+        await container.users.audit(callback.from_user.id, "authorization_started")
+        await state.set_state(LoginState.qr)
+        await callback.message.answer_photo(BufferedInputFile(buffer.getvalue(), "telegram-login-qr.png"), "🔐 Открой Telegram на телефоне: Settings -> Devices -> Link Desktop Device.\n\nОтсканируй QR. Код в чат отправлять не нужно.", reply_markup=qr_keyboard())
+        pending.wait_task = asyncio.create_task(wait_for_qr(callback.from_user.id, callback.message, state, pending, login))
+        await callback.answer()
+
+    @router.callback_query(F.data == "auth:phone")
+    async def auth_phone(callback: CallbackQuery, state: FSMContext) -> None:
+        await cleanup_auth(callback.from_user.id, state)
         await state.set_state(LoginState.phone)
-        await callback.message.edit_text("📱 Отправь номер телефона в международном формате.\nПример: +79991234567", reply_markup=cancel_keyboard())
+        await callback.message.answer("📱 QR-вход отменён. Отправь номер в формате +79991234567.\n\nTelegram может заблокировать код, если отправить его в control bot. QR безопаснее.", reply_markup=cancel_keyboard())
         await callback.answer()
 
     @router.callback_query(F.data == "auth:cancel")
@@ -107,21 +171,6 @@ def create_router(container: object) -> Router:
         await state.set_state(LoginState.code)
         await message.answer("🔐 Telegram отправил код входа. Отправь код.", reply_markup=cancel_keyboard())
 
-    async def complete_login(message: Message, state: FSMContext, pending: PendingLogin) -> None:
-        me = await pending.client.get_me()
-        session = StringSession.save(pending.client.session)
-        try:
-            await container.users.connect(message.from_user.id, me.id, me.username, me.first_name, container.crypto.encrypt(session))
-            await container.manager.start_user(message.from_user.id, preconnected_client=pending.client, session=session, account_id=me.id)
-        except ValueError:
-            await pending.client.disconnect(); await cleanup_auth(message.from_user.id, state)
-            await message.answer("⚠️ Этот Telegram аккаунт уже подключён."); return
-        await container.users.audit(message.from_user.id, "authorization_successful")
-        container.temp_auth.pop(message.from_user.id, None)
-        await state.clear()
-        await message.answer("✅ Telegram аккаунт подключён. Userbot уже online.")
-        await show_menu(message, message.from_user.id)
-
     @router.message(LoginState.code)
     async def receive_code(message: Message, state: FSMContext) -> None:
         pending = container.temp_auth.get(message.from_user.id)
@@ -135,7 +184,7 @@ def create_router(container: object) -> Router:
             await state.set_state(LoginState.password); await message.answer("🔐 На аккаунте включена 2FA. Отправь пароль.", reply_markup=cancel_keyboard()); return
         except (PhoneCodeInvalidError, PhoneCodeExpiredError):
             await message.answer("❌ Код неверный или истёк. Нажми отмену и запроси новый.", reply_markup=cancel_keyboard()); return
-        await complete_login(message, state, pending)
+        await complete_login(message.from_user.id, message, state, pending)
 
     @router.message(LoginState.password)
     async def receive_password(message: Message, state: FSMContext) -> None:
@@ -152,7 +201,7 @@ def create_router(container: object) -> Router:
             else: await message.answer("❌ Неверный пароль. Попробуй ещё раз.", reply_markup=cancel_keyboard())
             return
         password = ""
-        await complete_login(message, state, pending)
+        await complete_login(message.from_user.id, message, state, pending)
 
     @router.callback_query(F.data == "logout:ask")
     async def ask_logout(callback: CallbackQuery) -> None:
