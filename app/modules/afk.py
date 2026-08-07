@@ -38,7 +38,7 @@ async def maybe_reply_afk(client: object, event: object) -> None:
             return
         try:
             history = []
-            async for message in client.iter_messages(event.chat_id, limit=6):
+            async for message in event.client.iter_messages(event.chat_id, limit=6):
                 if message.raw_text:
                     speaker = "я" if message.out else "собеседник"
                     history.append(f"{speaker}: {message.raw_text[:300]}")
