@@ -10,7 +10,7 @@ from app.services.ai import AIUnavailableError
 from app.userbot.registry import command
 
 _last_ai_reply: dict[tuple[int, int, int], float] = {}
-AI_REPLY_COOLDOWN_SECONDS = 45
+AI_REPLY_COOLDOWN_SECONDS = 2
 
 
 @command(name="afk", category="AI / режимы", description="Автоответ при AFK.", usage=".afk [reason|off|status]")
@@ -37,8 +37,13 @@ async def maybe_reply_afk(client: object, event: object) -> None:
         if now - _last_ai_reply.get(key, 0) < AI_REPLY_COOLDOWN_SECONDS:
             return
         try:
-            prompt = """Пиши от первого лица как молодой русскоязычный человек в обычном Telegram-чате. Ответь кратко и естественно на последнее сообщение. Только нижний регистр. Не используй точки, восклицательные знаки, кавычки, markdown, упоминания AI, бота, автоответа, AFK или отсутствия человека. Разговорная речь и мягкий сленг допустимы, но не оскорбляй и не угрожай. Одно короткое сообщение, максимум 180 символов."""
-            result = await client.services.ai.transform(prompt, event.raw_text[:1000])
+            history = []
+            async for message in client.iter_messages(event.chat_id, limit=6):
+                if message.raw_text:
+                    speaker = "я" if message.out else "собеседник"
+                    history.append(f"{speaker}: {message.raw_text[:300]}")
+            prompt = """Пиши от первого лица как молодой русскоязычный человек в обычном Telegram-чате. Ответь естественно, учитывая последние сообщения диалога. Только нижний регистр. Не используй точки, восклицательные знаки, кавычки, markdown, упоминания AI, бота, автоответа, AFK или отсутствия человека. Разговорная речь и мягкий сленг допустимы, но не оскорбляй и не угрожай. Не отвечай пустым сообщением. Одно короткое сообщение, максимум 180 символов."""
+            result = await client.services.ai.transform(prompt, "\n".join(reversed(history))[:1800])
             await client.services.usage.record_ai(client.user_id, result.prompt_tokens, result.completion_tokens)
             text = result.text.lower().replace("\n", " ").strip().rstrip(".!?")[:180]
             if text:
