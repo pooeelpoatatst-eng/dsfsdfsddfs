@@ -15,6 +15,10 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 database_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or "postgresql+asyncpg://localhost/userbot"
+if database_url.startswith("postgres://"):
+    database_url = "postgresql+asyncpg://" + database_url.removeprefix("postgres://")
+elif database_url.startswith("postgresql://"):
+    database_url = "postgresql+asyncpg://" + database_url.removeprefix("postgresql://")
 config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
