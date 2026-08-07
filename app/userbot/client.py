@@ -114,3 +114,5 @@ class UserClient:
         if event.sender_id == self.telegram_user_id or not event.raw_text: return
         from app.modules.afk import maybe_reply_afk
         await maybe_reply_afk(self, event)
+        from app.modules.games import handle_opponent_move
+        await handle_opponent_move(self, event)

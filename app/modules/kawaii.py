@@ -61,10 +61,9 @@ async def kawaii(context: object) -> None:
     chat_id = 0 if global_scope else context.chat_id
     if args and args[0] == "off":
         await context.client.mode_manager.set(chat_id, "kawaii", False)
-        await context.edit("╭ Kawaii\n├ Status: OFF\n╰ Scope: " + ("all chats" if global_scope else "this chat")); return
+        await context.delete(); return
     if args and args[0] in {"ai", "local"}:
         await context.client.mode_manager.set(chat_id, "kawaii", True, {"engine": args[0]})
-        await context.edit(f"╭ Kawaii\n├ Status: ON\n├ Mode: {args[0].upper()}\n╰ Scope: {'all chats' if global_scope else 'this chat'}"); return
+        await context.delete(); return
     enabled = await context.client.mode_manager.toggle(chat_id, "kawaii")
-    config = await context.client.mode_manager.config(chat_id, "kawaii")
-    await context.edit(f"╭ Kawaii\n├ Status: {'ON' if enabled else 'OFF'}\n├ Mode: {config.get('engine', 'local').upper()}\n╰ Scope: {'all chats' if global_scope else 'this chat'}")
+    await context.delete()

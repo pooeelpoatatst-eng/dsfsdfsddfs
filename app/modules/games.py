@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 from telethon.tl import functions, types
 
 from app.games.tictactoe import TicTacToe
 from app.userbot.registry import command
 
-_games: dict[tuple[int, int], TicTacToe] = {}
+@dataclass
+class Match:
+    game: TicTacToe
+    owner_id: int
+    opponent_id: int
+
+_games: dict[int, Match] = {}
 
 @command(name="flip", category="Игры", description="Подбросить монету.", usage=".flip")
 async def flip(context: object) -> None: await context.edit("🪙 " + random.choice(["Орёл", "Решка"]))
@@ -23,13 +30,48 @@ async def dice(context: object) -> None:
     ))
     await context.delete()
 
-@command(name="ttt", category="Игры", description="Крестики-нолики в текущем чате.", usage=".ttt [1-9]")
+async def render(context: object, match: Match, reply_to: int | None = None) -> None:
+    player = match.owner_id if match.game.turn == "X" else match.opponent_id
+    message = await context.event.client.send_message(context.chat_id, "🎮 Tic-tac-toe\n" + match.game.render() + f"\nХод: {'X' if match.game.turn == 'X' else 'O'} (`{player}`): .ttt <1-9>", reply_to=reply_to)
+    context.client.mark_internal(message)
+
+@command(name="ttt", category="Игры", description="Крестики-нолики с reply-пользователем.", usage=".ttt <@user/reply> | .ttt 1-9")
 async def ttt(context: object) -> None:
-    key = (context.user_id, context.chat_id); game = _games.get(key)
-    if not context.args:
-        game = TicTacToe(); _games[key] = game; await context.edit("🎮 Tic-tac-toe\n" + game.render() + "\nХод X: .ttt 1"); return
-    if not game: await context.edit("⚠️ Сначала начни игру: .ttt"); return
-    try: winner = game.move(int(context.args[0]))
-    except (ValueError, IndexError): await context.edit("⚠️ Неверный ход."); return
-    if winner: _games.pop(key, None); await context.edit(game.render() + f"\n🏆 Победил {winner}"); return
-    await context.edit(game.render() + f"\nХод {game.turn}")
+    match = _games.get(context.chat_id)
+    if context.args and context.args[0].lower() == "stop":
+        _games.pop(context.chat_id, None); await context.delete(); return
+    if context.args and context.args[0].isdigit():
+        if not match or match.owner_id != context.client.telegram_user_id:
+            await context.edit("⚠️ Начни игру reply-командой `.ttt`."); return
+        if match.game.turn != "X": await context.edit("⚠️ Сейчас ход соперника."); return
+        try: winner = match.game.move(int(context.args[0]))
+        except ValueError: await context.edit("⚠️ Эта клетка занята."); return
+        await context.delete()
+        if winner:
+            _games.pop(context.chat_id, None)
+            message = await context.event.client.send_message(context.chat_id, match.game.render() + "\n🏆 Ты победил!")
+            context.client.mark_internal(message); return
+        await render(context, match); return
+    reply = await context.get_reply()
+    if not reply or not reply.sender_id or reply.sender_id == context.client.telegram_user_id:
+        await context.edit("⚠️ Ответь на сообщение соперника: `.ttt`"); return
+    _games[context.chat_id] = Match(TicTacToe(), context.client.telegram_user_id, reply.sender_id)
+    await context.delete()
+    await render(context, _games[context.chat_id], reply.id)
+
+
+async def handle_opponent_move(client: object, event: object) -> None:
+    match = _games.get(event.chat_id)
+    text = (event.raw_text or "").strip()
+    if not match or event.sender_id != match.opponent_id or match.game.turn != "O" or not text.startswith(".ttt "):
+        return
+    try: cell = int(text.split(maxsplit=1)[1])
+    except ValueError: return
+    try: winner = match.game.move(cell)
+    except ValueError:
+        message = await event.reply("⚠️ Эта клетка занята. Выбери другую: `.ttt 1-9`"); client.mark_internal(message); return
+    if winner:
+        _games.pop(event.chat_id, None)
+        message = await event.reply(match.game.render() + "\n🏆 Соперник победил!"); client.mark_internal(message); return
+    message = await event.reply("🎮 Tic-tac-toe\n" + match.game.render() + "\nТвой ход: `.ttt <1-9>`")
+    client.mark_internal(message)
