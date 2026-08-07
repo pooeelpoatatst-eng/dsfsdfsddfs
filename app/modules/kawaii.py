@@ -33,7 +33,9 @@ def local_kawaii(text: str) -> str:
 
 async def transform_kawaii(client: object, chat_id: int, text: str) -> str | None:
     config = await client.mode_manager.config(chat_id, "kawaii")
-    mode = config.get("engine", "ai")
+    # Local is the reliable default: it works instantly and does not need AI.
+    # AI is an explicit opt-in via `.kawaii ai`.
+    mode = config.get("engine", "local")
     if mode == "local" or text.strip().lower() in SHORT_LOCAL_WORDS:
         return local_kawaii(text)
     usage = await client.services.usage.ai_usage(client.user_id)
@@ -65,4 +67,4 @@ async def kawaii(context: object) -> None:
         await context.edit(f"╭ Kawaii\n├ Status: ON\n├ Mode: {args[0].upper()}\n╰ Scope: {'all chats' if global_scope else 'this chat'}"); return
     enabled = await context.client.mode_manager.toggle(chat_id, "kawaii")
     config = await context.client.mode_manager.config(chat_id, "kawaii")
-    await context.edit(f"╭ Kawaii\n├ Status: {'ON' if enabled else 'OFF'}\n├ Mode: {config.get('engine', 'ai').upper()}\n╰ Scope: {'all chats' if global_scope else 'this chat'}")
+    await context.edit(f"╭ Kawaii\n├ Status: {'ON' if enabled else 'OFF'}\n├ Mode: {config.get('engine', 'local').upper()}\n╰ Scope: {'all chats' if global_scope else 'this chat'}")

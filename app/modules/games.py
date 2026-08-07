@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import random
 
+from telethon.tl import functions, types
+
 from app.games.tictactoe import TicTacToe
 from app.userbot.registry import command
 
@@ -12,7 +14,14 @@ async def flip(context: object) -> None: await context.edit("🪙 " + random.cho
 
 @command(name="dice", category="Игры", description="Бросить кубик Telegram.", usage=".dice")
 async def dice(context: object) -> None:
-    await context.delete(); result = await context.event.client.send_message(context.chat_id, file="🎲"); context.client.mark_internal(result)
+    peer = await context.event.client.get_input_entity(context.chat_id)
+    await context.event.client(functions.messages.SendMediaRequest(
+        peer=peer,
+        media=types.InputMediaDice(emoticon="🎲"),
+        message="",
+        random_id=random.randrange(-(2**63), 2**63),
+    ))
+    await context.delete()
 
 @command(name="ttt", category="Игры", description="Крестики-нолики в текущем чате.", usage=".ttt [1-9]")
 async def ttt(context: object) -> None:

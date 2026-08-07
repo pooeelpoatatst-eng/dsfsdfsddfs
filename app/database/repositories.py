@@ -87,7 +87,13 @@ class UsageRepository:
         async with self.db.session() as s:
             row = await s.scalar(select(AIUsage).where(AIUsage.user_id == user_id, AIUsage.date == date.today()))
             if not row: row = AIUsage(user_id=user_id, date=date.today()); s.add(row)
-            row.requests += 1; row.prompt_tokens += prompt_tokens; row.completion_tokens += completion_tokens; row.total_tokens += prompt_tokens + completion_tokens; row.errors += int(error)
+            # Existing rows created before a flush may still contain None instead
+            # of Python-side defaults, so normalise all counters before incrementing.
+            row.requests = (row.requests or 0) + 1
+            row.prompt_tokens = (row.prompt_tokens or 0) + prompt_tokens
+            row.completion_tokens = (row.completion_tokens or 0) + completion_tokens
+            row.total_tokens = (row.total_tokens or 0) + prompt_tokens + completion_tokens
+            row.errors = (row.errors or 0) + int(error)
     async def command(self, user_id: int, name: str) -> None:
         async with self.db.session() as s:
             row = await s.scalar(select(CommandUsage).where(CommandUsage.user_id == user_id, CommandUsage.command == name))
