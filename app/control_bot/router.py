@@ -133,7 +133,11 @@ def create_router(container: object) -> Router:
         container.temp_auth[callback.from_user.id] = pending
         await container.users.audit(callback.from_user.id, "authorization_started")
         await state.set_state(LoginState.qr)
-        await callback.message.answer_photo(BufferedInputFile(buffer.getvalue(), "telegram-login-qr.png"), "🔐 Открой Telegram на телефоне: Settings -> Devices -> Link Desktop Device.\n\nОтсканируй QR. Код в чат отправлять не нужно.", reply_markup=qr_keyboard())
+        await callback.message.answer_photo(
+            photo=BufferedInputFile(buffer.getvalue(), "telegram-login-qr.png"),
+            caption="🔐 Открой Telegram на телефоне: Settings -> Devices -> Link Desktop Device.\n\nОтсканируй QR. Код в чат отправлять не нужно.",
+            reply_markup=qr_keyboard(),
+        )
         pending.wait_task = asyncio.create_task(wait_for_qr(callback.from_user.id, callback.message, state, pending, login))
         await callback.answer()
 
