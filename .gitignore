@@ -1,0 +1,12 @@
+.env
+*.session
+*.session-journal
+__pycache__/
+*.pyc
+logs/
+tmp/
+.idea/
+.vscode/
+.pytest_cache/
+.coverage
+.venv/
