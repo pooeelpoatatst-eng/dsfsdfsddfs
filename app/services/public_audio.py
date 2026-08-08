@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,11 @@ class PublicAudioError(RuntimeError):
 class DownloadedAudio:
     path: Path
     source_url: str
+
+
+def public_searches(query: str) -> tuple[str, ...]:
+    """Public sources tried in order; no account cookies or paywall bypasses."""
+    return (f"scsearch1:{query}", f"ytsearch1:{query}")
 
 
 async def download_public_audio(query: str, max_mb: int = 50) -> DownloadedAudio:
@@ -33,31 +39,33 @@ def _download(query: str, max_mb: int) -> DownloadedAudio:
     except ImportError as exc:
         raise PublicAudioError("На сервере не установлен обработчик аудио.") from exc
     folder = Path(tempfile.mkdtemp(prefix="userbot-audio-"))
-    output = folder / "track.%(ext)s"
-    options = {
-        "format": "bestaudio/best",
-        "default_search": "ytsearch1",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "outtmpl": str(output),
-        "max_filesize": max_mb * 1024 * 1024,
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
-    }
     try:
-        with yt_dlp.YoutubeDL(options) as downloader:
-            info = downloader.extract_info(f"ytsearch1:{query}", download=True)
-            selected = (info.get("entries") or [info])[0]
-            duration = selected.get("duration")
-            if duration is not None and duration < 20:
-                raise PublicAudioError("Публичный поиск вернул слишком короткий фрагмент, а не трек.")
-            source = str(selected.get("webpage_url") or selected.get("original_url") or "")
-    except Exception as exc:
-        raise PublicAudioError("Не нашёл доступный публичный аудиоисточник для этого трека.") from exc
-    files = list(folder.glob("*.mp3"))
-    if not files:
-        raise PublicAudioError("Источник не отдал аудиофайл в подходящем формате.")
-    path = files[0]
-    if path.stat().st_size > max_mb * 1024 * 1024:
-        raise PublicAudioError(f"Трек больше {max_mb} МБ и не помещается в лимит.")
-    return DownloadedAudio(path, source)
+        for attempt, search in enumerate(public_searches(query), start=1):
+            output = folder / f"track-{attempt}.%(ext)s"
+            options = {
+                "format": "bestaudio/best",
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "outtmpl": str(output),
+                "max_filesize": max_mb * 1024 * 1024,
+                "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
+            }
+            try:
+                with yt_dlp.YoutubeDL(options) as downloader:
+                    info = downloader.extract_info(search, download=True)
+                selected = (info.get("entries") or [info])[0]
+                duration = selected.get("duration")
+                if duration is not None and duration < 20:
+                    continue
+                files = list(folder.glob(f"track-{attempt}.mp3"))
+                if not files or files[0].stat().st_size > max_mb * 1024 * 1024:
+                    continue
+                source = str(selected.get("webpage_url") or selected.get("original_url") or "")
+                return DownloadedAudio(files[0], source)
+            except Exception:
+                continue
+        raise PublicAudioError("Не нашёл доступный публичный аудиоисточник для этого трека.")
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
