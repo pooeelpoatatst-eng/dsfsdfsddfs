@@ -4,6 +4,7 @@ from app.games.tictactoe import TicTacToe
 
 def test_2048_merges_once_per_pair() -> None:
     game = Game2048([[2, 2, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    game.spawn = lambda: None
     game.move("left")
     assert game.board[0][:3] == [4, 2, 0]
 

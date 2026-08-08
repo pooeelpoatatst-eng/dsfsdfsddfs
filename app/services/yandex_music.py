@@ -24,9 +24,20 @@ YAMUSIC_HOSTS = {"music.yandex.ru", "music.yandex.com", "music.yandex.kz", "musi
 META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
 META_ATTRIBUTE_RE = re.compile(r"([\w:-]+)\s*=\s*([\"'])(.*?)\2", re.I)
 TRACK_ID_RE = re.compile(r'(?:"trackId"|"track_id"|"id")\s*:\s*"?(\d{3,})"?', re.I)
+URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.I)
+
+
+def normalize_yandex_music_url(value: str) -> str:
+    """Extract a share URL from plain text/Markdown and unescape HTML query text."""
+    value = html.unescape(value.strip())
+    match = URL_RE.search(value)
+    if match:
+        value = match.group(0)
+    return value.strip(" \t\r\n<>'\"()[]")
 
 
 def validate_yandex_music_url(url: str) -> str:
+    url = normalize_yandex_music_url(url)
     try:
         validated = validate_public_url(url)
     except UnsafeURLError as exc:
@@ -34,6 +45,9 @@ def validate_yandex_music_url(url: str) -> str:
     host = (urlparse(validated).hostname or "").lower().removeprefix("www.")
     if host not in YAMUSIC_HOSTS:
         raise YandexMusicError("Поддерживаются только ссылки music.yandex.ru (и региональные домены).")
+    path = urlparse(validated).path
+    if not re.search(r"/(?:album/\d+/)?track/\d+(?:/|$)", path, re.I):
+        raise YandexMusicError("A Yandex Music track link is required for .ym.")
     return validated
 
 

@@ -23,9 +23,21 @@ class CommandContext:
         await self.client.rate_limiter.wait("message_edit")
         return await self.event.edit(text)
 
+    async def edit_html(self, text: str) -> Message:
+        """Edit with Telegram HTML formatting for menus and structured output."""
+        self.client.processed.add(self.chat_id, self.message.id)
+        await self.client.rate_limiter.wait("message_edit")
+        return await self.event.edit(text, parse_mode="html")
+
     async def reply(self, text: str) -> Message:
         await self.client.rate_limiter.wait("message_send")
         result = await self.event.reply(text)
+        self.client.mark_internal(result)
+        return result
+
+    async def reply_html(self, text: str) -> Message:
+        await self.client.rate_limiter.wait("message_send")
+        result = await self.event.reply(text, parse_mode="html")
         self.client.mark_internal(result)
         return result
 
