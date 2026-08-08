@@ -68,6 +68,15 @@ async def afk(context: object) -> None:
     await context.edit(f"💤 AFK включён{': ' + arg[:500] if arg else ''}")
 
 
+@command(name="unafk", category="AFK", description="Отключить обычный AFK-автоответ.", usage=".unafk")
+async def unafk(context: object) -> None:
+    async with context.services.settings.db.session() as session:
+        state = await session.get(AfkState, context.user_id)
+        if state:
+            state.enabled = False
+    await context.edit("💤 AFK выключен.")
+
+
 async def maybe_reply_afk(client: object, event: object) -> None:
     ai_chats = [int(chat_id) for chat_id in await client.services.settings.get(client.user_id, "afk_ai_chats", [])]
     if event.chat_id in ai_chats and client.services.ai.available:
