@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 
+from telethon.errors import BotInlineDisabledError, ChatSendInlineForbiddenError
 from telethon.tl import functions, types
 
 from app.userbot.registry import command
@@ -14,11 +15,27 @@ async def _display_name(event: object) -> str:
 
 async def _start(context: object, method: str, *args: object, reply_to: int | None = None) -> None:
     try:
-        await getattr(context.services.games, method)(context.chat_id, *args, reply_to=reply_to)
+        token = await getattr(context.services.games, method)(*args)
+        bot = await context.event.client.get_input_entity("@" + await context.services.games.bot_username())
+        peer = await context.event.client.get_input_entity(context.chat_id)
+        results = await context.event.client(functions.messages.GetInlineBotResultsRequest(bot=bot, peer=peer, query=f"game:{token}", offset=""))
+        if not results.results:
+            raise RuntimeError("No inline game result")
+        await context.event.client(functions.messages.SendInlineBotResultRequest(
+            peer=peer,
+            query_id=results.query_id,
+            id=results.results[0].id,
+            reply_to=types.InputReplyToMessage(reply_to) if reply_to else None,
+            random_id=random.randrange(-(2**63), 2**63),
+        ))
+    except BotInlineDisabledError:
+        await context.edit("⚠️ У бота выключен inline-режим. В @BotFather: /mybots → этот бот → Bot Settings → Inline Mode → Turn on.")
+        return
+    except ChatSendInlineForbiddenError:
+        await context.edit("⚠️ В этом чате запрещены inline-сообщения.")
+        return
     except Exception:
-        # The bot must be able to post in the selected chat. Most commonly it
-        # hasn't been added to a group yet or has no permission to send.
-        await context.edit("⚠️ Не смог отправить игровое поле. Добавь control bot в этот чат и дай ему право писать сообщения.")
+        await context.edit("⚠️ Не смог создать игру в этом чате. Проверь, что у control bot включён Inline Mode в @BotFather.")
         return
     await context.delete()
 
@@ -48,7 +65,7 @@ async def ttt(context: object) -> None:
         return
     await _start(
         context,
-        "start_ttt",
+        "create_ttt",
         context.client.telegram_user_id,
         reply.sender_id,
         await _display_name(context.event),
@@ -59,7 +76,7 @@ async def ttt(context: object) -> None:
 
 @command(name="2048", category="Игры", description="Кнопочная игра 2048.", usage=".2048")
 async def game_2048(context: object) -> None:
-    await _start(context, "start_2048", context.client.telegram_user_id, await _display_name(context.event))
+    await _start(context, "create_2048", context.client.telegram_user_id, await _display_name(context.event))
 
 
 @command(name="rps", aliases=["камень"], category="Игры", description="Камень, ножницы, бумага с пользователем в reply.", usage=".rps (reply на соперника)")
@@ -70,7 +87,7 @@ async def rps(context: object) -> None:
         return
     await _start(
         context,
-        "start_rps",
+        "create_rps",
         context.client.telegram_user_id,
         reply.sender_id,
         await _display_name(context.event),
@@ -81,9 +98,9 @@ async def rps(context: object) -> None:
 
 @command(name="guess", aliases=["угадай"], category="Игры", description="Угадай число кнопками.", usage=".guess")
 async def guess(context: object) -> None:
-    await _start(context, "start_guess", context.client.telegram_user_id)
+    await _start(context, "create_guess", context.client.telegram_user_id)
 
 
 @command(name="wordly", aliases=["wordle"], category="Игры", description="Угадай русское слово из 5 букв кнопками.", usage=".wordly")
 async def wordly(context: object) -> None:
-    await _start(context, "start_wordly", context.client.telegram_user_id)
+    await _start(context, "create_wordly", context.client.telegram_user_id)

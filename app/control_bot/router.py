@@ -10,7 +10,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineQuery, Message
 from aiogram.types import BufferedInputFile
 import qrcode
 from telethon.errors import (PhoneCodeExpiredError, PhoneCodeInvalidError, PhoneNumberInvalidError,
@@ -42,6 +42,11 @@ def create_router(container: object) -> Router:
     async def game_callback(callback: CallbackQuery) -> None:
         if not container.games or not await container.games.handle_callback(callback):
             await callback.answer("Игра уже недоступна.", show_alert=True)
+
+    @router.inline_query(F.query.startswith("game:"))
+    async def game_inline(query: InlineQuery) -> None:
+        result = container.games.inline_result(query.query) if container.games else None
+        await query.answer([result] if result else [], cache_time=0, is_personal=True)
 
     async def menu_text(control_id: int) -> tuple[str, bool]:
         user = await container.users.ensure(control_id)

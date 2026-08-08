@@ -5,7 +5,7 @@ import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
 
 from app.games.game2048 import Game2048
 from app.games.tictactoe import TicTacToe
@@ -71,12 +71,7 @@ class WordlySession:
 
 
 class GameService:
-    """In-memory interactive games rendered by the control bot.
-
-    A Telegram user account cannot receive callback queries for its own inline
-    keyboards. The connected Bot API bot therefore owns the messages and the
-    userbot only starts a game from a dot-command.
-    """
+    """In-memory games sent as inline-bot messages by the user account itself."""
 
     def __init__(self, bot: Any) -> None:
         self.bot = bot
@@ -85,6 +80,7 @@ class GameService:
         self.rps: dict[str, RpsSession] = {}
         self.guess: dict[str, GuessSession] = {}
         self.wordly: dict[str, WordlySession] = {}
+        self._bot_username: str | None = None
 
     @staticmethod
     def _id() -> str:
@@ -94,15 +90,18 @@ class GameService:
     def _button(text: str, data: str) -> InlineKeyboardButton:
         return InlineKeyboardButton(text=text, callback_data=data)
 
-    async def _send(self, chat_id: int, text: str, markup: InlineKeyboardMarkup, reply_to: int | None = None) -> Any:
-        return await self.bot.send_message(chat_id, text, reply_markup=markup, reply_to_message_id=reply_to)
+    async def bot_username(self) -> str:
+        if not self._bot_username:
+            me = await self.bot.get_me()
+            if not me.username:
+                raise RuntimeError("Control bot needs a public username for inline games")
+            self._bot_username = me.username
+        return self._bot_username
 
-    async def start_ttt(self, chat_id: int, owner_id: int, opponent_id: int, owner_name: str, opponent_name: str, reply_to: int | None = None) -> None:
+    async def create_ttt(self, owner_id: int, opponent_id: int, owner_name: str, opponent_name: str) -> str:
         token = self._id()
-        session = TicTacToeSession(owner_id, opponent_id, owner_name, opponent_name)
-        self.ttt[token] = session
-        message = await self._send(chat_id, self._ttt_text(session), self._ttt_keyboard(token, session), reply_to)
-        session.message_id = message.message_id
+        self.ttt[token] = TicTacToeSession(owner_id, opponent_id, owner_name, opponent_name)
+        return token
 
     def _ttt_text(self, session: TicTacToeSession, result: str | None = None) -> str:
         if result:
@@ -128,12 +127,10 @@ class GameService:
         ])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
-    async def start_2048(self, chat_id: int, owner_id: int, owner_name: str, reply_to: int | None = None) -> None:
+    async def create_2048(self, owner_id: int, owner_name: str) -> str:
         token = self._id()
-        session = Game2048Session(owner_id, owner_name)
-        self.games_2048[token] = session
-        message = await self._send(chat_id, self._2048_text(session), self._2048_keyboard(token), reply_to)
-        session.message_id = message.message_id
+        self.games_2048[token] = Game2048Session(owner_id, owner_name)
+        return token
 
     @staticmethod
     def _tile(value: int) -> str:
@@ -153,12 +150,10 @@ class GameService:
             [self._button("🔄 Заново", f"g:2:{token}:reset"), self._button("✖️ Закрыть", f"g:2:{token}:close")],
         ])
 
-    async def start_rps(self, chat_id: int, owner_id: int, opponent_id: int, owner_name: str, opponent_name: str, reply_to: int | None = None) -> None:
+    async def create_rps(self, owner_id: int, opponent_id: int, owner_name: str, opponent_name: str) -> str:
         token = self._id()
-        session = RpsSession(owner_id, opponent_id, owner_name, opponent_name)
-        self.rps[token] = session
-        message = await self._send(chat_id, self._rps_text(session), self._rps_keyboard(token), reply_to)
-        session.message_id = message.message_id
+        self.rps[token] = RpsSession(owner_id, opponent_id, owner_name, opponent_name)
+        return token
 
     @staticmethod
     def _rps_keyboard(token: str) -> InlineKeyboardMarkup:
@@ -175,12 +170,10 @@ class GameService:
         waiting = session.opponent_name if session.owner_id in session.choices else session.owner_name
         return f"🪨 Камень · 📄 Бумага · ✂️ Ножницы\n\n{session.owner_name} vs {session.opponent_name}\n\nВыбрали: {', '.join(chosen) or 'пока никто'}\nЖдём: {waiting}"
 
-    async def start_guess(self, chat_id: int, owner_id: int, reply_to: int | None = None) -> None:
+    async def create_guess(self, owner_id: int) -> str:
         token = self._id()
-        session = GuessSession(owner_id)
-        self.guess[token] = session
-        message = await self._send(chat_id, self._guess_text(session), self._guess_keyboard(token), reply_to)
-        session.message_id = message.message_id
+        self.guess[token] = GuessSession(owner_id)
+        return token
 
     @staticmethod
     def _guess_keyboard(token: str) -> InlineKeyboardMarkup:
@@ -193,12 +186,38 @@ class GameService:
     def _guess_text(session: GuessSession, status: str = "") -> str:
         return f"🔢 Угадай число от 1 до 9\n\nПопыток: {session.attempts}\n{status or 'Выбери число кнопкой.'}"
 
-    async def start_wordly(self, chat_id: int, owner_id: int, reply_to: int | None = None) -> None:
+    async def create_wordly(self, owner_id: int) -> str:
         token = self._id()
-        session = WordlySession(owner_id)
-        self.wordly[token] = session
-        message = await self._send(chat_id, self._wordly_text(session), self._wordly_keyboard(token, session), reply_to)
-        session.message_id = message.message_id
+        self.wordly[token] = WordlySession(owner_id)
+        return token
+
+    def inline_result(self, query: str) -> InlineQueryResultArticle | None:
+        """Return the game card that Telegram will send *as the user* via bot."""
+        prefix, _, token = query.partition(":")
+        if prefix != "game" or not token:
+            return None
+        if token in self.ttt:
+            session = self.ttt[token]
+            return InlineQueryResultArticle(id=token, title="Крестики-нолики", description=f"{session.owner_name} vs {session.opponent_name}", input_message_content=InputTextMessageContent(message_text=self._ttt_text(session)), reply_markup=self._ttt_keyboard(token, session))
+        if token in self.games_2048:
+            session = self.games_2048[token]
+            return InlineQueryResultArticle(id=token, title="2048", description="Играть кнопками", input_message_content=InputTextMessageContent(message_text=self._2048_text(session)), reply_markup=self._2048_keyboard(token))
+        if token in self.rps:
+            session = self.rps[token]
+            return InlineQueryResultArticle(id=token, title="Камень · Ножницы · Бумага", description=f"{session.owner_name} vs {session.opponent_name}", input_message_content=InputTextMessageContent(message_text=self._rps_text(session)), reply_markup=self._rps_keyboard(token))
+        if token in self.guess:
+            session = self.guess[token]
+            return InlineQueryResultArticle(id=token, title="Угадай число", description="От 1 до 9", input_message_content=InputTextMessageContent(message_text=self._guess_text(session)), reply_markup=self._guess_keyboard(token))
+        if token in self.wordly:
+            session = self.wordly[token]
+            return InlineQueryResultArticle(id=token, title="Wordly", description="Угадай слово из 5 букв", input_message_content=InputTextMessageContent(message_text=self._wordly_text(session)), reply_markup=self._wordly_keyboard(token, session))
+        return None
+
+    async def _edit(self, callback: Any, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
+        if getattr(callback, "inline_message_id", None):
+            await self.bot.edit_message_text(inline_message_id=callback.inline_message_id, text=text, reply_markup=markup)
+        else:
+            await callback.message.edit_text(text, reply_markup=markup)
 
     @staticmethod
     def _wordly_keyboard(token: str, session: WordlySession) -> InlineKeyboardMarkup:
@@ -258,15 +277,14 @@ class GameService:
             await self._forbidden(callback); return
         if action == "cancel":
             self.ttt.pop(token, None)
-            await callback.message.edit_text(self._ttt_text(session, "Игра отменена."))
-            await callback.message.edit_reply_markup(reply_markup=None)
+            await self._edit(callback, self._ttt_text(session, "Игра отменена."))
             await callback.answer(); return
         if action == "reset":
             if callback.from_user.id != session.owner_id:
                 await callback.answer("Заново может начать тот, кто создал игру.", show_alert=True); return
             session.game = TicTacToe()
             session.finished = False
-            await callback.message.edit_text(self._ttt_text(session), reply_markup=self._ttt_keyboard(token, session))
+            await self._edit(callback, self._ttt_text(session), self._ttt_keyboard(token, session))
             await callback.answer("Новая партия!"); return
         if session.finished:
             await callback.answer("Партия уже завершена. Нажми «Заново».", show_alert=True); return
@@ -280,10 +298,10 @@ class GameService:
         if winner or all(cell != " " for cell in session.game.board):
             result = f"🏆 Победил {session.owner_name if winner == 'X' else session.opponent_name}!" if winner else "🤝 Ничья!"
             session.finished = True
-            await callback.message.edit_text(self._ttt_text(session, result), reply_markup=self._ttt_keyboard(token, session, True))
+            await self._edit(callback, self._ttt_text(session, result), self._ttt_keyboard(token, session, True))
             await callback.answer()
             return
-        await callback.message.edit_text(self._ttt_text(session), reply_markup=self._ttt_keyboard(token, session))
+        await self._edit(callback, self._ttt_text(session), self._ttt_keyboard(token, session))
         await callback.answer()
 
     async def _handle_2048(self, callback: Any, token: str, action: str) -> None:
@@ -294,7 +312,7 @@ class GameService:
             await self._forbidden(callback); return
         if action == "close":
             self.games_2048.pop(token, None)
-            await callback.message.edit_text("🎮 2048 закрыта."); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, "🎮 2048 закрыта."); await callback.answer(); return
         if action == "reset":
             session.game = Game2048()
             status = "Новая игра!"
@@ -303,7 +321,7 @@ class GameService:
             status = "Ход не меняет поле." if not changed else ""
         if not session.game.can_move():
             status = "💥 Ходов больше нет. Нажми «Заново»."
-        await callback.message.edit_text(self._2048_text(session, status), reply_markup=self._2048_keyboard(token))
+        await self._edit(callback, self._2048_text(session, status), self._2048_keyboard(token))
         await callback.answer()
 
     async def _handle_rps(self, callback: Any, token: str, action: str) -> None:
@@ -314,13 +332,12 @@ class GameService:
             await self._forbidden(callback); return
         if action == "cancel":
             self.rps.pop(token, None)
-            await callback.message.edit_text("🪨 Камень · 📄 Бумага · ✂️ Ножницы\n\nИгра отменена.")
-            await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, "🪨 Камень · 📄 Бумага · ✂️ Ножницы\n\nИгра отменена."); await callback.answer(); return
         if callback.from_user.id in session.choices:
             await callback.answer("Выбор уже принят.", show_alert=True); return
         session.choices[callback.from_user.id] = action
         if len(session.choices) < 2:
-            await callback.message.edit_text(self._rps_text(session), reply_markup=self._rps_keyboard(token))
+            await self._edit(callback, self._rps_text(session), self._rps_keyboard(token))
             await callback.answer("Выбор скрыт до конца раунда."); return
         first, second = session.choices[session.owner_id], session.choices[session.opponent_id]
         beats = {"rock": "scissors", "scissors": "paper", "paper": "rock"}
@@ -331,7 +348,7 @@ class GameService:
             outcome = f"🏆 Победил {session.owner_name if beats[first] == second else session.opponent_name}"
         result = f"{session.owner_name}: {labels[first]}\n{session.opponent_name}: {labels[second]}\n\n{outcome}"
         self.rps.pop(token, None)
-        await callback.message.edit_text(self._rps_text(session, result)); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer()
+        await self._edit(callback, self._rps_text(session, result)); await callback.answer()
 
     async def _handle_guess(self, callback: Any, token: str, action: str) -> None:
         session = self.guess.get(token)
@@ -341,17 +358,17 @@ class GameService:
             await self._forbidden(callback); return
         if action == "close":
             self.guess.pop(token, None)
-            await callback.message.edit_text("🔢 Игра закрыта."); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, "🔢 Игра закрыта."); await callback.answer(); return
         number = int(action)
         if number == session.target:
             self.guess.pop(token, None)
-            await callback.message.edit_text(f"🔢 Угадал! Это было число {number}. 🎉"); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, f"🔢 Угадал! Это было число {number}. 🎉"); await callback.answer(); return
         session.attempts -= 1
         if session.attempts == 0:
             self.guess.pop(token, None)
-            await callback.message.edit_text(f"🔢 Попытки закончились. Было число {session.target}."); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, f"🔢 Попытки закончились. Было число {session.target}."); await callback.answer(); return
         hint = "больше" if number < session.target else "меньше"
-        await callback.message.edit_text(self._guess_text(session, f"Неа, загаданное число {hint}."), reply_markup=self._guess_keyboard(token)); await callback.answer()
+        await self._edit(callback, self._guess_text(session, f"Неа, загаданное число {hint}."), self._guess_keyboard(token)); await callback.answer()
 
     async def _handle_wordly(self, callback: Any, token: str, action: str) -> None:
         session = self.wordly.get(token)
@@ -361,8 +378,7 @@ class GameService:
             await self._forbidden(callback); return
         if action == "close":
             self.wordly.pop(token, None)
-            await callback.message.edit_text(f"🟩 Wordly закрыт. Слово было: {session.word.upper()}.")
-            await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+            await self._edit(callback, f"🟩 Wordly закрыт. Слово было: {session.word.upper()}."); await callback.answer(); return
         if action == "back":
             session.typed = session.typed[:-1]
         elif action == "enter":
@@ -375,7 +391,7 @@ class GameService:
                 won = guess == session.word
                 self.wordly.pop(token, None)
                 tail = "🏆 Угадано!" if won else f"💥 Слово было: {session.word.upper()}."
-                await callback.message.edit_text(self._wordly_text(session, tail)); await callback.message.edit_reply_markup(reply_markup=None); await callback.answer(); return
+                await self._edit(callback, self._wordly_text(session, tail)); await callback.answer(); return
         elif len(action) == 1 and action in "йцукенгшщзхъфывапролджэячсмитьбю" and len(session.typed) < 5:
             session.typed += action
-        await callback.message.edit_text(self._wordly_text(session), reply_markup=self._wordly_keyboard(token, session)); await callback.answer()
+        await self._edit(callback, self._wordly_text(session), self._wordly_keyboard(token, session)); await callback.answer()

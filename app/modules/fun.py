@@ -1,11 +1,39 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import random
 import time
+from io import BytesIO
+
+from PIL import Image, ImageDraw, ImageFont
 
 from app.modules.tools import argument_or_reply
 from app.userbot.registry import command
+
+
+def _animation_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for path in ("C:/Windows/Fonts/seguisb.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _send_gif(context: object, frames: list[Image.Image], name: str, caption: str = "") -> object:
+    result = BytesIO()
+    result.name = name
+    frames[0].save(result, format="GIF", save_all=True, append_images=frames[1:], duration=85, loop=0, disposal=2)
+    result.seek(0)
+    return result
+
+
+async def _post_animation(context: object, frames: list[Image.Image], name: str, caption: str = "") -> None:
+    file = _send_gif(context, frames, name, caption)
+    await context.delete()
+    message = await context.event.client.send_file(context.chat_id, file, caption=caption or None, force_document=False, supports_streaming=True)
+    context.client.mark_internal(message)
 
 
 async def target(context: object) -> str:
@@ -93,16 +121,26 @@ async def loading(context: object) -> None:
         await context.edit(f"⌛ loading\n\n{frame}\n{index * 10}%")
         await asyncio.sleep(1)
 
-@command(name="heart", category="Анимации", description="Аккуратная пульсация сердца с подписью.", usage=".heart [текст]")
+@command(name="heart", category="Анимации", description="Анимированное сердце с подписью.", usage=".heart [текст]")
 async def heart(context: object) -> None:
-    caption = context.raw_args.strip()[:120]
-    frames = (
-        "  🩷🩷   🩷🩷\n 🩷🩷🩷 🩷🩷🩷\n  🩷🩷🩷🩷🩷\n   🩷🩷🩷🩷\n    🩷🩷🩷\n     🩷🩷\n      🩷",
-        " 💖💖💖   💖💖💖\n💖💖💖💖💖 💖💖💖💖💖\n 💖💖💖💖💖💖💖💖💖\n  💖💖💖💖💖💖💖\n   💖💖💖💖💖\n    💖💖💖\n     💖",
-    )
-    for frame in (frames[0], frames[1], frames[0], "💗"):
-        await context.edit(f"{frame}\n\n{caption}" if caption else frame)
-        await asyncio.sleep(0.85)
+    caption = context.raw_args.strip()[:100]
+    frames: list[Image.Image] = []
+    for index in range(34):
+        image = Image.new("RGB", (640, 480), "#100914")
+        draw = ImageDraw.Draw(image)
+        pulse = 1 + 0.13 * math.sin(index / 34 * math.tau * 2)
+        scale = 11.5 * pulse
+        points = []
+        for step in range(180):
+            t = math.tau * step / 180
+            x = 16 * math.sin(t) ** 3
+            y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+            points.append((320 + x * scale, 218 - y * scale))
+        glow = (255, 60 + int(35 * pulse), 145)
+        draw.polygon(points, fill=glow)
+        draw.text((320, 400), caption or "люблю", font=_animation_font(34), anchor="mm", fill="#ffe7f1")
+        frames.append(image)
+    await _post_animation(context, frames, "heart.gif", caption)
 
 @command(name="boom", category="Анимации", description="Мини-взрыв.", usage=".boom")
 async def boom(context: object) -> None:
@@ -110,11 +148,21 @@ async def boom(context: object) -> None:
         await context.edit(frame)
         await asyncio.sleep(2)
 
-@command(name="rainbow", category="Анимации", description="Радужная волна вокруг текста.", usage=".rainbow <text>")
+@command(name="rainbow", category="Анимации", description="Длинная радужная GIF-анимация текста.", usage=".rainbow <text>")
 async def rainbow(context: object) -> None:
-    text = context.raw_args.strip() or "радуга"
-    colors = ("🟥", "🟧", "🟨", "🟩", "🟦", "🟪")
-    for offset in range(6):
-        wave = "".join(colors[(index + offset) % len(colors)] for index in range(9))
-        await context.edit(f"{wave}\n✨ {text} ✨\n{wave[::-1]}")
-        await asyncio.sleep(0.7)
+    text = context.raw_args.strip()[:40] or "РАДУГА"
+    font = _animation_font(max(34, min(76, 720 // max(1, len(text)))))
+    colours = ((255, 67, 111), (255, 154, 56), (255, 224, 80), (74, 220, 136), (70, 158, 255), (160, 104, 255))
+    frames: list[Image.Image] = []
+    for frame in range(42):
+        image = Image.new("RGB", (720, 360), "#101019")
+        draw = ImageDraw.Draw(image)
+        widths = [draw.textlength(char, font=font) for char in text]
+        x = (720 - sum(widths)) / 2
+        for index, char in enumerate(text):
+            y = 170 + int(20 * math.sin((frame * .36) + index * .72))
+            color = colours[(index + frame // 3) % len(colours)]
+            draw.text((x, y), char, font=font, fill=color, anchor="lm", stroke_width=1, stroke_fill="#ffffff")
+            x += widths[index]
+        frames.append(image)
+    await _post_animation(context, frames, "rainbow.gif")
