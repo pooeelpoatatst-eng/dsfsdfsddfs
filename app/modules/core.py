@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import asyncio
+import os
 
 from app.constants import DEFAULT_MODULES
 from app.userbot.registry import REGISTRY, command, commands
@@ -102,3 +104,14 @@ async def aliases(context: object) -> None:
         return
     lines = "\n".join(f"• .{name} → .{target}" for name, target in sorted(saved.items()))
     await context.edit(f"🏷 Алиасы\n\n{lines}")
+
+
+@command(name="restart", category="Core", description="Перезапустить worker userbot после подтверждения в чате.", usage=".restart")
+async def restart(context: object) -> None:
+    await context.edit("🔄 Перезапускаю worker…")
+
+    async def stop_worker() -> None:
+        await asyncio.sleep(1)
+        os._exit(0)
+
+    asyncio.create_task(stop_worker())
