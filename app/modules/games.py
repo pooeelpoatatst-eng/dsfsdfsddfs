@@ -57,7 +57,7 @@ async def dice(context: object) -> None:
     await context.delete()
 
 
-@command(name="ttt", category="Игры", description="Кнопочные крестики-нолики с пользователем в reply.", usage=".ttt (reply на соперника)")
+@command(name="ttt", aliases=["tictactoe"], category="Игры", description="Кнопочные крестики-нолики с пользователем в reply.", usage=".ttt (reply на соперника)")
 async def ttt(context: object) -> None:
     reply = await context.get_reply()
     if not reply or not reply.sender_id or reply.sender_id == context.client.telegram_user_id:
@@ -74,7 +74,7 @@ async def ttt(context: object) -> None:
     )
 
 
-@command(name="2048", category="Игры", description="Кнопочная игра 2048.", usage=".2048")
+@command(name="2048", aliases=["game2048"], category="Игры", description="Кнопочная игра 2048.", usage=".2048")
 async def game_2048(context: object) -> None:
     await _start(context, "create_2048", context.client.telegram_user_id, await _display_name(context.event))
 

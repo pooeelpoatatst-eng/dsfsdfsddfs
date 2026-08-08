@@ -26,13 +26,14 @@ def _command_lines(metas: list[CommandMeta], width: int = 42) -> list[str]:
     result: list[str] = []
     current = ""
     for meta in sorted(metas, key=lambda item: item.name):
-        token = f".{meta.name}"
-        candidate = f"{current} | {token}" if current else token
-        if current and len(candidate) > width:
-            result.append(current)
-            current = token
-        else:
-            current = candidate
+        for name in (meta.name, *meta.aliases):
+            token = f".{name}"
+            candidate = f"{current} | {token}" if current else token
+            if current and len(candidate) > width:
+                result.append(current)
+                current = token
+            else:
+                current = candidate
     if current:
         result.append(current)
     return result or ["—"]
@@ -59,6 +60,7 @@ def help_pages(limit: int = 3_700) -> list[str]:
     for meta in commands():
         grouped[meta.category].append(meta)
     header = "<b>📚 SaveMod UserBot — команды</b>"
+    footer = "\n\n<i>.help &lt;команда&gt; — назначение и использование</i>"
     blocks: list[str] = []
     for category in sorted(grouped, key=lambda item: CATEGORY_TITLES.get(item, item)):
         title = CATEGORY_TITLES.get(category, category)
@@ -67,12 +69,12 @@ def help_pages(limit: int = 3_700) -> list[str]:
     current = header
     for block in blocks:
         candidate = f"{current}\n\n{block}"
-        if len(candidate) > limit and current != header:
+        if len(candidate) > limit - len(footer) and current != header:
             pages.append(current)
             current = header + "\n\n" + block
         else:
             current = candidate
-    pages.append(current + "\n\n<i>.help &lt;команда&gt; — назначение и использование</i>")
+    pages.append(current + footer)
     return pages
 
 
