@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from app.modules.quotes import _quote_html
-from app.modules.streak import apply_message, is_active
+from app.modules.streak import _days_label, apply_message, is_active
 
 
 def test_fake_quote_is_visibly_labelled() -> None:
@@ -20,3 +20,10 @@ def test_streak_requires_messages_from_both_sides_each_day() -> None:
     entry, completed = apply_message(entry, today + timedelta(days=1), "in")
     assert completed is True and entry["count"] == 2
     assert is_active(entry, today + timedelta(days=2))
+
+
+def test_streak_days_label() -> None:
+    assert _days_label(1) == "день"
+    assert _days_label(2) == "дня"
+    assert _days_label(5) == "дней"
+    assert _days_label(11) == "дней"

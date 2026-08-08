@@ -9,6 +9,13 @@ from app.userbot.registry import command
 KEY = "streaks"
 
 
+def _days_label(count: int) -> str:
+    last_two = count % 100
+    if 11 <= last_two <= 14:
+        return "дней"
+    return {1: "день", 2: "дня", 3: "дня", 4: "дня"}.get(count % 10, "дней")
+
+
 def _day(value: str | None) -> date | None:
     try:
         return date.fromisoformat(value or "")
@@ -69,10 +76,11 @@ async def streak(context: object) -> None:
     identifier, name = await _target(context)
     entry = (await _data(context)).get(identifier or "")
     if not entry:
-        await context.edit(f"🔥 С {name or 'этим человеком'} серии пока нет. Она начнётся после сообщений с обеих сторон.")
+        await context.edit(f"🔥 С {name or 'этим человеком'} серии пока нет. Нужны сообщения с обеих сторон за день.")
         return
     state = "горит" if is_active(entry, date.today()) else "погас"
-    await context.edit(f"🔥 {entry.get('name', name)}\nСерия: {entry.get('count', 0)} дней · {state}\nПоследний засчитанный день: {entry.get('last')}")
+    count = int(entry.get("count", 0))
+    await context.edit(f"🔥 {entry.get('name', name)}: {count} {_days_label(count)} · {state}")
 
 
 @command(name="streaks", category="Огонёк", description="Показать все текущие и погасшие серии.", usage=".streaks")
@@ -119,15 +127,22 @@ async def record_message(client: Any, event: Any, direction: str) -> None:
     values = values if isinstance(values, dict) else {}
     entry = values.get(identifier, {})
     entry = entry if isinstance(entry, dict) else {}
+    had_streak_before = bool(entry.get("started"))
+    was_active = is_active(entry, date.today())
     entry["name"] = name
     entry, completed = apply_message(entry, date.today(), direction)
     values[identifier] = entry
     await client.services.settings.set(client.user_id, KEY, values)
     if completed:
-        # Keep the milestone private: the user sees it in Saved Messages,
-        # whereas the person in the chat gets no automated streak spam.
         try:
-            sent = await event.client.send_message("me", f"🔥 Серия с {name}: {entry['count']} дней")
+            count = int(entry["count"])
+            if had_streak_before and not was_active:
+                text = f"🔥 Серия снова горит: {count} {_days_label(count)}"
+            elif count == 1:
+                text = "🔥 Серия началась: 1 день"
+            else:
+                text = f"🔥 Серия: {count} {_days_label(count)}"
+            sent = await event.client.send_message(event.chat_id, text)
             client.mark_internal(sent)
         except Exception:
             pass
