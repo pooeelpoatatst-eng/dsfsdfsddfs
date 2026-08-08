@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import re
 
 from app.services.public_audio import PublicAudioError, download_public_audio
 from app.services.yandex_music import SharedTrack, YandexMusicError, YandexMusicShareService
@@ -18,8 +19,11 @@ async def _send_audio(context: object, track: SharedTrack) -> None:
         await context.edit(f"⚠️ {exc}")
         return
     try:
+        safe_name = re.sub(r'[\\/:*?"<>|]+', "_", track.title).strip()[:120] or "track"
+        path = audio.path.with_name(f"{safe_name}.mp3")
+        audio.path.rename(path)
         await context.delete()
-        message = await context.event.client.send_file(context.chat_id, str(audio.path), caption=f"🎵 {track.title[:220]}", force_document=False, supports_streaming=True)
+        message = await context.event.client.send_file(context.chat_id, str(path), caption=f"🎵 {track.title[:220]}", force_document=False, supports_streaming=True)
         context.client.mark_internal(message)
     finally:
         shutil.rmtree(audio.path.parent, ignore_errors=True)
@@ -62,14 +66,15 @@ async def ym_playlist(context: object) -> None:
 
 @command(name="randomtrack", aliases=["ymrandom", "track"], category="Музыка", description="Взять случайный трек из сохранённого Yandex Music плейлиста и отправить файлом.", usage=".randomtrack")
 async def random_track(context: object) -> None:
-    saved = await context.services.settings.get(context.user_id, "ym_playlist", {})
-    url = saved.get("url") if isinstance(saved, dict) else None
-    if not url:
-        await context.edit("⚠️ Сначала сохрани свой Yandex Music плейлист: `.ymplaylist set <публичная ссылка>`")
+    import random
+    tracks = []
+    async for message in context.event.client.iter_messages("me", limit=5_000):
+        if getattr(message, "audio", None):
+            tracks.append(message)
+    if not tracks:
+        await context.edit("⚠️ В «Избранном» нет аудиофайлов. Сохрани туда треки — `.randomtrack` возьмёт случайный.")
         return
-    try:
-        track = await music.random_track(url)
-    except YandexMusicError as exc:
-        await context.edit(f"⚠️ {exc}")
-        return
-    await _send_audio(context, track)
+    await context.delete()
+    result = await context.event.client.forward_messages(context.chat_id, random.choice(tracks), from_peer="me", drop_author=True)
+    for item in result if isinstance(result, list) else [result]:
+        context.client.mark_internal(item)

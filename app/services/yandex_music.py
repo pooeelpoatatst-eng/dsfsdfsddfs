@@ -21,7 +21,8 @@ class SharedTrack:
 
 
 YAMUSIC_HOSTS = {"music.yandex.ru", "music.yandex.com", "music.yandex.kz", "music.yandex.by", "music.yandex.uz"}
-OG_TITLE_RE = re.compile(r'<meta[^>]+(?:property|name)=["\']og:title["\'][^>]+content=["\']([^"\']+)', re.I)
+META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
+META_ATTRIBUTE_RE = re.compile(r"([\w:-]+)\s*=\s*([\"'])(.*?)\2", re.I)
 TRACK_ID_RE = re.compile(r'(?:"trackId"|"track_id"|"id")\s*:\s*"?(\d{3,})"?', re.I)
 
 
@@ -36,12 +37,22 @@ def validate_yandex_music_url(url: str) -> str:
     return validated
 
 
+def _meta_content(page: str, key: str) -> str:
+    for tag in META_TAG_RE.findall(page):
+        attrs = {name.lower(): html.unescape(value).strip() for name, _, value in META_ATTRIBUTE_RE.findall(tag)}
+        if attrs.get("property", "").lower() == key or attrs.get("name", "").lower() == key:
+            return attrs.get("content", "")
+    return ""
+
+
 def parse_og_title(page: str) -> str:
-    match = OG_TITLE_RE.search(page)
-    if not match:
-        return "Трек из Яндекс Музыки"
-    title = html.unescape(match.group(1)).strip()
-    return re.sub(r"\s*[—–-]\s*Яндекс Музыка.*$", "", title, flags=re.I)[:240] or "Трек из Яндекс Музыки"
+    title = _meta_content(page, "og:title") or _meta_content(page, "twitter:title")
+    description = _meta_content(page, "og:description") or _meta_content(page, "twitter:description")
+    title = re.sub(r"\s*[—–-]\s*Яндекс Музыка.*$", "", title, flags=re.I).strip()
+    artist = description.split("•", 1)[0].strip()
+    if title and artist and artist.lower() not in {"трек", title.lower()}:
+        return f"{artist} — {title}"[:240]
+    return title[:240]
 
 
 def parse_track_ids(page: str) -> list[str]:
@@ -56,7 +67,7 @@ class YandexMusicShareService:
     async def _page(self, url: str) -> str:
         url = validate_yandex_music_url(url)
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(12), follow_redirects=False, headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12), follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
                 response = await client.get(url)
                 response.raise_for_status()
         except httpx.HTTPError as exc:
@@ -65,7 +76,10 @@ class YandexMusicShareService:
 
     async def track(self, url: str) -> SharedTrack:
         page = await self._page(url)
-        return SharedTrack(validate_yandex_music_url(url), parse_og_title(page))
+        title = parse_og_title(page)
+        if not title:
+            raise YandexMusicError("Не смог прочитать название трека из ссылки. Пришли именно ссылку на трек, не альбом или плейлист.")
+        return SharedTrack(validate_yandex_music_url(url), title)
 
     async def random_track(self, playlist_url: str) -> SharedTrack:
         page = await self._page(playlist_url)

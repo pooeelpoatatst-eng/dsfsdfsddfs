@@ -47,7 +47,11 @@ def _download(query: str, max_mb: int) -> DownloadedAudio:
     try:
         with yt_dlp.YoutubeDL(options) as downloader:
             info = downloader.extract_info(f"ytsearch1:{query}", download=True)
-            source = str(info.get("webpage_url") or info.get("original_url") or "")
+            selected = (info.get("entries") or [info])[0]
+            duration = selected.get("duration")
+            if duration is not None and duration < 20:
+                raise PublicAudioError("Публичный поиск вернул слишком короткий фрагмент, а не трек.")
+            source = str(selected.get("webpage_url") or selected.get("original_url") or "")
     except Exception as exc:
         raise PublicAudioError("Не нашёл доступный публичный аудиоисточник для этого трека.") from exc
     files = list(folder.glob("*.mp3"))

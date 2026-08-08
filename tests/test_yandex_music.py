@@ -4,7 +4,7 @@ from app.services.yandex_music import YandexMusicError, parse_og_title, parse_tr
 
 
 def test_parses_public_page_metadata() -> None:
-    page = '<meta property="og:title" content="Артист — Трек — Яндекс Музыка"><script>{"trackId":"123"}{"trackId":"456"}{"trackId":"123"}</script>'
+    page = '<meta content="Артист • Трек • 2026" property="og:description"><meta content="Трек" property="og:title"><script>{"trackId":"123"}{"trackId":"456"}{"trackId":"123"}</script>'
     assert parse_og_title(page) == "Артист — Трек"
     assert parse_track_ids(page) == ["123", "456"]
 
