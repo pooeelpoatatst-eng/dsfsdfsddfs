@@ -24,6 +24,7 @@ YAMUSIC_HOSTS = {"music.yandex.ru", "music.yandex.com", "music.yandex.kz", "musi
 META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
 META_ATTRIBUTE_RE = re.compile(r"([\w:-]+)\s*=\s*([\"'])(.*?)\2", re.I)
 TRACK_ID_RE = re.compile(r'(?:"trackId"|"track_id"|"id")\s*:\s*"?(\d{3,})"?', re.I)
+TRACK_PATH_RE = re.compile(r"/(?:album/\d+/)?track/(?P<id>\d+)(?:/|$)", re.I)
 URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.I)
 
 
@@ -46,9 +47,30 @@ def validate_yandex_music_url(url: str) -> str:
     if host not in YAMUSIC_HOSTS:
         raise YandexMusicError("Поддерживаются только ссылки music.yandex.ru (и региональные домены).")
     path = urlparse(validated).path
-    if not re.search(r"/(?:album/\d+/)?track/\d+(?:/|$)", path, re.I):
+    if not TRACK_PATH_RE.search(path):
         raise YandexMusicError("A Yandex Music track link is required for .ym.")
     return validated
+
+
+def track_id_from_url(url: str) -> str:
+    match = TRACK_PATH_RE.search(urlparse(validate_yandex_music_url(url)).path)
+    if not match:
+        raise YandexMusicError("A Yandex Music track link is required for .ym.")
+    return match.group("id")
+
+
+def track_title_from_api(data: object) -> str:
+    if not isinstance(data, dict):
+        return ""
+    result = data.get("result")
+    track = result[0] if isinstance(result, list) and result else None
+    if not isinstance(track, dict):
+        return ""
+    title = str(track.get("title") or "").strip()
+    artists = track.get("artists")
+    names = [str(item.get("name") or "").strip() for item in artists if isinstance(item, dict)] if isinstance(artists, list) else []
+    artist = ", ".join(name for name in names if name)
+    return f"{artist} — {title}"[:240] if artist and title else title[:240]
 
 
 def _meta_content(page: str, key: str) -> str:
@@ -89,11 +111,22 @@ class YandexMusicShareService:
         return response.text
 
     async def track(self, url: str) -> SharedTrack:
-        page = await self._page(url)
-        title = parse_og_title(page)
+        url = validate_yandex_music_url(url)
+        track_id = track_id_from_url(url)
+        title = ""
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12), headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
+                response = await client.get(f"https://api.music.yandex.net/tracks/{track_id}")
+                response.raise_for_status()
+                title = track_title_from_api(response.json())
+        except (httpx.HTTPError, ValueError):
+            try:
+                title = parse_og_title(await self._page(url))
+            except YandexMusicError:
+                title = ""
         if not title:
             raise YandexMusicError("Не смог прочитать название трека из ссылки. Пришли именно ссылку на трек, не альбом или плейлист.")
-        return SharedTrack(validate_yandex_music_url(url), title)
+        return SharedTrack(url, title)
 
     async def random_track(self, playlist_url: str) -> SharedTrack:
         page = await self._page(playlist_url)

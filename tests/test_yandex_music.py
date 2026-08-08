@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.yandex_music import YandexMusicError, normalize_yandex_music_url, parse_og_title, parse_track_ids, validate_yandex_music_url
+from app.services.yandex_music import YandexMusicError, normalize_yandex_music_url, parse_og_title, parse_track_ids, track_id_from_url, track_title_from_api, validate_yandex_music_url
 
 
 def test_parses_public_page_metadata() -> None:
@@ -18,3 +18,9 @@ def test_accepts_album_track_share_url_and_html_query() -> None:
     url = "[track](https://music.yandex.ru/album/43309761/track/154249264?utm_source=desktop&amp;utm_medium=copy_link)"
     assert normalize_yandex_music_url(url) == "https://music.yandex.ru/album/43309761/track/154249264?utm_source=desktop&utm_medium=copy_link"
     assert validate_yandex_music_url(url).startswith("https://music.yandex.ru/album/43309761/track/154249264")
+    assert track_id_from_url(url) == "154249264"
+
+
+def test_parses_track_title_from_public_yandex_api_payload() -> None:
+    payload = {"result": [{"title": "Танцуешь", "artists": [{"name": "Locked23"}]}]}
+    assert track_title_from_api(payload) == "Locked23 — Танцуешь"

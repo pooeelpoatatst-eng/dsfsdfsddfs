@@ -1,4 +1,4 @@
-from app.modules.help import help_pages, module_table
+from app.modules.help import compact_menu, help_pages, module_table
 from app.userbot.registry import CommandMeta
 
 
@@ -16,3 +16,8 @@ def test_help_menu_uses_html_pre_tables() -> None:
     pages = help_pages(limit=500)
     assert "<pre>" in pages[0]
     assert all(len(page) <= 600 for page in pages)
+
+
+def test_compact_menu_has_no_brand_name_or_tables() -> None:
+    menu = compact_menu()
+    assert "SaveMod" not in menu and "<pre>" not in menu

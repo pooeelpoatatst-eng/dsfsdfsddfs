@@ -59,7 +59,7 @@ def help_pages(limit: int = 3_700) -> list[str]:
     grouped: dict[str, list[CommandMeta]] = defaultdict(list)
     for meta in commands():
         grouped[meta.category].append(meta)
-    header = "<b>📚 SaveMod UserBot — команды</b>"
+    header = "<b>📚 Команды</b>"
     footer = "\n\n<i>.help &lt;команда&gt; — назначение и использование</i>"
     blocks: list[str] = []
     for category in sorted(grouped, key=lambda item: CATEGORY_TITLES.get(item, item)):
@@ -83,6 +83,23 @@ def help_menu() -> str:
     return "\n\n".join(help_pages())
 
 
+def compact_menu() -> str:
+    grouped: dict[str, list[CommandMeta]] = defaultdict(list)
+    for meta in commands():
+        grouped[meta.category].append(meta)
+    rows = []
+    for category in sorted(grouped, key=lambda item: CATEGORY_TITLES.get(item, item)):
+        title = CATEGORY_TITLES.get(category, category)
+        plain = title.split(" ", 1)[-1]
+        rows.append(f"• <code>.help {html.escape(category)}</code> — {html.escape(plain)}")
+    return (
+        "<b>📚 Команды</b>\n"
+        "<i>.help &lt;команда&gt; — описание и использование</i>\n"
+        "<i>.help &lt;модуль&gt; — таблица модуля</i>\n\n"
+        + "\n".join(rows)
+    )
+
+
 @command(
     name="help",
     aliases=["h"],
@@ -95,7 +112,23 @@ async def help_command(context: object) -> None:
         query = context.args[0].removeprefix(".").lower()
         meta = REGISTRY.get(query)
         if not meta:
-            await context.edit("⚠️ Команда не найдена. Открой .help.")
+            grouped: dict[str, list[CommandMeta]] = defaultdict(list)
+            for item in commands():
+                grouped[item.category].append(item)
+            category = next(
+                (
+                    name for name, values in grouped.items()
+                    if query in {name.lower(), CATEGORY_TITLES.get(name, name).lower(), values[0].module.lower()}
+                ),
+                None,
+            )
+            if not category:
+                await context.edit("⚠️ Команда или модуль не найдены. Открой .help.")
+                return
+            await context.edit_html(
+                f"<b>{html.escape(CATEGORY_TITLES.get(category, category))}</b>\n"
+                f"<pre>{html.escape(module_table(category, grouped[category]))}</pre>"
+            )
             return
         aliases = f"\nАлиасы: {', '.join(f'.{alias}' for alias in meta.aliases)}" if meta.aliases else ""
         await context.edit_html(
@@ -103,7 +136,4 @@ async def help_command(context: object) -> None:
             f"\n\n<b>Использование</b>\n<code>{html.escape(meta.usage)}</code>"
         )
         return
-    pages = help_pages()
-    await context.edit_html(pages[0])
-    for page in pages[1:]:
-        await context.reply_html(page)
+    await context.edit_html(compact_menu())

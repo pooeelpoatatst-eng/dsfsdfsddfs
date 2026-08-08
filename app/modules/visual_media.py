@@ -83,11 +83,18 @@ async def to_sticker(context: object) -> None:
 @command(name="round", category="Circles", description="Сделать из reply-видео круглое видео, до 60 секунд.", usage="reply .round")
 async def round_video(context: object) -> None:
     reply = await context.get_reply()
+    if not reply or not reply.file:
+        await context.edit("⚠️ Ответь на короткое видео.")
+        return
+    if reply.file.size and reply.file.size > 25 * 1024 * 1024:
+        await context.edit("⚠️ Для круга файл должен быть до 25 МБ — так обработка не подвесит userbot.")
+        return
+    await context.edit("🎬 Делаю круг: максимум 60 секунд…")
     try:
         folder, path = await ffmpeg_reply(
             context.event.client, reply, output_name="round", output_suffix=".mp4",
             args=[
-                "-t", "60", "-vf", "crop='min(iw,ih)':'min(iw,ih)',scale=480:480",
+                "-t", "60", "-vf", "crop='min(iw,ih)':'min(iw,ih)',scale=360:360",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac",
             ],
         )

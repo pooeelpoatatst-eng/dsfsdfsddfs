@@ -78,6 +78,7 @@ class UserClient:
         self.client.add_event_handler(self._on_outgoing, events.NewMessage(outgoing=True))
         self.client.add_event_handler(self._on_incoming, events.NewMessage(incoming=True))
         self.client.add_event_handler(self._on_chat_action, events.ChatAction())
+        self.client.add_event_handler(self._on_user_update, events.UserUpdate())
 
     async def health_check(self) -> bool:
         try:
@@ -162,3 +163,7 @@ class UserClient:
     async def _on_chat_action(self, event: Any) -> None:
         from app.modules.welcome import maybe_welcome
         await maybe_welcome(self, event)
+
+    async def _on_user_update(self, event: Any) -> None:
+        from app.modules.typing_watch import maybe_record_typing
+        await maybe_record_typing(self, event)

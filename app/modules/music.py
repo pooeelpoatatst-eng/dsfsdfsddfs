@@ -64,17 +64,20 @@ async def ym_playlist(context: object) -> None:
     await context.edit(f"🎶 Плейлист: {url}" if url else "🎶 Плейлист не задан. `.ymplaylist set <публичная ссылка>`")
 
 
-@command(name="randomtrack", aliases=["ymrandom", "track"], category="Музыка", description="Взять случайный трек из сохранённого Yandex Music плейлиста и отправить файлом.", usage=".randomtrack")
+@command(name="randomtrack", aliases=["ymrandom"], category="Музыка", description="Отправить случайный аудиотрек из недавней музыки в «Избранном».", usage=".randomtrack")
 async def random_track(context: object) -> None:
     import random
-    tracks = []
-    async for message in context.event.client.iter_messages("me", limit=5_000):
-        if getattr(message, "audio", None):
-            tracks.append(message)
-    if not tracks:
+    from telethon import types
+    selected = None
+    count = 0
+    async for message in context.event.client.iter_messages("me", limit=300, filter=types.InputMessagesFilterMusic()):
+        count += 1
+        if random.randrange(count) == 0:
+            selected = message
+    if not selected:
         await context.edit("⚠️ В «Избранном» нет аудиофайлов. Сохрани туда треки — `.randomtrack` возьмёт случайный.")
         return
     await context.delete()
-    result = await context.event.client.forward_messages(context.chat_id, random.choice(tracks), from_peer="me", drop_author=True)
+    result = await context.event.client.forward_messages(context.chat_id, selected, from_peer="me", drop_author=True)
     for item in result if isinstance(result, list) else [result]:
         context.client.mark_internal(item)
