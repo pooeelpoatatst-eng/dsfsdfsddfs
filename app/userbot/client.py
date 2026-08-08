@@ -152,6 +152,8 @@ class UserClient:
         await maybe_reply_filter(self, event)
         from app.modules.swmute import maybe_swmute
         await maybe_swmute(self, event)
+        from app.modules.rp_mode import maybe_rp_reply
+        await maybe_rp_reply(self, event)
         from app.modules.afk import maybe_reply_afk
         await maybe_reply_afk(self, event)
         from app.modules.games import handle_opponent_move
