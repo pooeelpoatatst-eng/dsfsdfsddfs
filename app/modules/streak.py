@@ -131,14 +131,20 @@ async def record_message(client: Any, event: Any, direction: str) -> None:
     was_active = is_active(entry, date.today())
     entry["name"] = name
     entry, completed = apply_message(entry, date.today(), direction)
+    today_key = date.today().isoformat()
+    # Existing series created before chat announcements are migrated on the
+    # next message, so the user does not have to wait until tomorrow.
+    announcement_needed = entry.get("counted_day") == today_key and entry.get("announced_day") != today_key
+    if completed or announcement_needed:
+        entry["announced_day"] = today_key
     values[identifier] = entry
     await client.services.settings.set(client.user_id, KEY, values)
-    if completed:
+    if completed or announcement_needed:
         try:
             count = int(entry["count"])
-            if had_streak_before and not was_active:
+            if completed and had_streak_before and not was_active:
                 text = f"🔥 Серия снова горит: {count} {_days_label(count)}"
-            elif count == 1:
+            elif completed and count == 1:
                 text = "🔥 Серия началась: 1 день"
             else:
                 text = f"🔥 Серия: {count} {_days_label(count)}"
