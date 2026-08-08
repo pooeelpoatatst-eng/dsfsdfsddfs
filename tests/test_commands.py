@@ -7,3 +7,8 @@ def test_parser_supports_quoted_arguments() -> None:
 
 def test_parser_rejects_domain() -> None:
     assert parse_command(".example.com") is None
+
+
+def test_parser_supports_custom_prefix() -> None:
+    parsed = parse_command("!ping", "!")
+    assert parsed and parsed.name == "ping"

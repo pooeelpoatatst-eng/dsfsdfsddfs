@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.database.engine import Database
@@ -113,3 +113,13 @@ class NotesRepository:
             return await s.scalar(select(Note).where(Note.user_id == user_id, Note.name == name.lower(), Note.chat_id.in_([chat_id, None])).order_by(Note.chat_id.desc().nullslast()))
     async def list(self, user_id: int, chat_id: int) -> list[Note]:
         async with self.db.session() as s: return list((await s.scalars(select(Note).where(Note.user_id == user_id, Note.chat_id.in_([chat_id, None])))).all())
+
+    async def delete(self, user_id: int, name: str) -> bool:
+        async with self.db.session() as s:
+            result = await s.execute(delete(Note).where(Note.user_id == user_id, Note.name == name.lower()))
+            return bool(result.rowcount)
+
+    async def clear(self, user_id: int) -> int:
+        async with self.db.session() as s:
+            result = await s.execute(delete(Note).where(Note.user_id == user_id))
+            return int(result.rowcount or 0)

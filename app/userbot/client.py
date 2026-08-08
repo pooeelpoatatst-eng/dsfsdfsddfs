@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
+from dataclasses import replace
 from typing import Any
 
 from telethon import events
@@ -13,6 +14,7 @@ from app.constants import DEFAULT_MODULES
 from app.database.repositories import ModeRepository, SettingsRepository, UsageRepository
 from app.userbot.commands import parse_command
 from app.userbot.context import CommandContext
+from app.userbot.registry import REGISTRY
 from app.userbot.modes import ModeManager
 from app.userbot.processed_cache import ProcessedMessageCache
 from app.userbot.rate_limiter import RateLimiter
@@ -76,7 +78,14 @@ class UserClient:
                 self.processed.add(event.chat_id, event.id)
                 await event.edit(text[2:])
                 return
-            parsed = parse_command(text)
+            prefix = await self.services.settings.get(self.user_id, "command_prefix", ".")
+            prefix = prefix if isinstance(prefix, str) and 0 < len(prefix) <= 3 else "."
+            parsed = parse_command(text, prefix)
+            if parsed and not parsed.meta:
+                aliases = await self.services.settings.get(self.user_id, "command_aliases", {})
+                target = aliases.get(parsed.name) if isinstance(aliases, dict) else None
+                if isinstance(target, str) and target in REGISTRY:
+                    parsed = replace(parsed, name=target, meta=REGISTRY[target])
             if parsed:
                 await self._execute(event, parsed)
                 return
@@ -85,7 +94,8 @@ class UserClient:
     async def _execute(self, event: Any, parsed: Any) -> None:
         if not parsed.meta:
             return
-        if not self.services.modules.get(parsed.meta.module, True):
+        module_settings = await self.services.settings.get(self.user_id, "modules", self.services.modules)
+        if isinstance(module_settings, dict) and not module_settings.get(parsed.meta.module, True):
             await event.edit(f"⚠️ Модуль {parsed.meta.module} выключен. Включи его через control bot.")
             return
         context = CommandContext(self.owner_id, self.user_id, self, event, event.message, event.chat_id, parsed.args, parsed.raw_args, self.services)
@@ -118,6 +128,8 @@ class UserClient:
     async def _on_incoming(self, event: Any) -> None:
         # Incoming automation is intentionally isolated from outgoing transforms.
         if event.sender_id == self.telegram_user_id or not event.raw_text: return
+        from app.modules.filters import maybe_reply_filter
+        await maybe_reply_filter(self, event)
         from app.modules.afk import maybe_reply_afk
         await maybe_reply_afk(self, event)
         from app.modules.games import handle_opponent_move

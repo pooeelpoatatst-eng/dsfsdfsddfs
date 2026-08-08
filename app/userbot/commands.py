@@ -14,10 +14,10 @@ class ParsedCommand:
     meta: CommandMeta | None
 
 
-def parse_command(text: str) -> ParsedCommand | None:
-    if not text.startswith(".") or len(text) < 2 or text.startswith(".."):
+def parse_command(text: str, prefix: str = ".") -> ParsedCommand | None:
+    if not prefix or len(prefix) > 3 or not text.startswith(prefix) or len(text) <= len(prefix):
         return None
-    body = text[1:].strip()
+    body = text[len(prefix):].strip()
     if not body or body[0] in "/." or "." in body.split(maxsplit=1)[0]:
         return None
     try:
