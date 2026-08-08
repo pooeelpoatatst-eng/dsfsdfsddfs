@@ -15,7 +15,7 @@ def display_name(sender: object, fallback: int) -> str:
     return (getattr(sender, "first_name", None) or getattr(sender, "title", None) or str(fallback)).replace("\n", " ")[:24]
 
 
-@command(name="chatstats", aliases=["stats"], category="Чаты", description="Полная статистика сообщений текущего чата.", usage=".chatstats [N]")
+@command(name="chatstats", category="Чаты", description="Полная статистика сообщений текущего чата.", usage=".chatstats [N]")
 async def chatstats(context: object) -> None:
     try: limit = int(context.args[0]) if context.args else None
     except ValueError: await context.edit("⚠️ .chatstats или .chatstats 500"); return

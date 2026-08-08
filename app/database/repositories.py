@@ -100,6 +100,12 @@ class UsageRepository:
             if row: row.count += 1
             else: s.add(CommandUsage(user_id=user_id, command=name, count=1))
 
+    async def commands(self, user_id: int, limit: int = 15) -> list[CommandUsage]:
+        async with self.db.session() as s:
+            return list((await s.scalars(
+                select(CommandUsage).where(CommandUsage.user_id == user_id).order_by(CommandUsage.count.desc()).limit(limit)
+            )).all())
+
 
 class NotesRepository:
     def __init__(self, db: Database) -> None: self.db = db

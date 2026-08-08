@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import Any
 
 from telethon import events
+from telethon import functions
 from telethon.errors import FloodWaitError
 
 from app.constants import DEFAULT_MODULES
@@ -39,6 +40,7 @@ class UserClient:
         self.rate_limiter, self.processed = RateLimiter(), ProcessedMessageCache()
         self._locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._started = False
+        self._presence_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         if self._started: return
@@ -47,13 +49,30 @@ class UserClient:
             await self.client.disconnect()
             raise PermissionError("Telegram session is not authorized")
         self.register_handlers()
+        self._presence_task = asyncio.create_task(self._presence_loop())
         self._started = True
 
     async def stop(self, logout: bool = False) -> None:
+        if self._presence_task:
+            self._presence_task.cancel()
+            await asyncio.gather(self._presence_task, return_exceptions=True)
+            self._presence_task = None
         if logout and self.client.is_connected():
             await self.client.log_out()
         await self.client.disconnect()
         self._started = False
+
+    async def _presence_loop(self) -> None:
+        while True:
+            try:
+                enabled = await self.services.settings.get(self.user_id, "always_online", False)
+                if enabled:
+                    await self.client(functions.account.UpdateStatusRequest(offline=False))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("presence_update_failed user_id=%s", self.user_id, exc_info=True)
+            await asyncio.sleep(55)
 
     def register_handlers(self) -> None:
         self.client.add_event_handler(self._on_outgoing, events.NewMessage(outgoing=True))
