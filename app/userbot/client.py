@@ -161,8 +161,6 @@ class UserClient:
         await maybe_rp_reply(self, event)
         from app.modules.afk import maybe_reply_afk
         await maybe_reply_afk(self, event)
-        from app.modules.games import handle_opponent_move
-        await handle_opponent_move(self, event)
 
     async def _on_chat_action(self, event: Any) -> None:
         from app.modules.welcome import maybe_welcome

@@ -135,15 +135,19 @@ class YandexMusicShareService:
         url = validate_yandex_music_url(url)
         track_id = track_id_from_url(url)
         title = ""
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(12), headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
-                for host in ("api.music.yandex.net", "api.music.yandex.ru"):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12), headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
+            for host in ("api.music.yandex.net", "api.music.yandex.ru"):
+                try:
                     response = await client.get(f"https://{host}/tracks/{track_id}")
                     response.raise_for_status()
                     title = track_title_from_api(response.json())
                     if title:
                         break
-        except (httpx.HTTPError, ValueError):
+                # One Yandex API hostname may be geo-blocked (451) in a
+                # datacentre while the other one remains available.
+                except (httpx.HTTPError, ValueError):
+                    continue
+        if not title:
             try:
                 title = parse_og_title(await self._page(url))
             except YandexMusicError:
