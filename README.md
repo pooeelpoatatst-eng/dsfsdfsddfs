@@ -89,8 +89,8 @@ Use PostgreSQL, not SQLite: this project uses PostgreSQL JSONB columns. `DATABAS
 - Automation: per-chat/global kawaii mode, `//` escape, local/AI hybrid transformation, AFK direct-message reply and configurable AI replies.
 - Personal AI style: `.afkai prompt <описание>`, `.afkai learn [1-400]`, `.afkai on|off|status`. Learning here means a private style context made from the owner's own chat messages; it is not a model fine-tune.
 - AI tools: `.ai`, `.sum`, `.replyai`, `.rewrite`, `.translate`, `.explain`, `.tasks`, `.planai`, `.proofread`, `.ideas`.
-- Music: `.ym <Yandex Music track URL>` shares a rich track link in the current chat; `.ymplaylist set <public playlist URL>` and `.randomtrack` share a random track from that playlist. Audio files are not downloaded or copied from Yandex Music.
-- Games: `.flip`, `.dice`, `.ttt`, `.2048`, `.rps`, `.guess`, `.wordly`. Interactive games are sent by the control bot, so add it to a group before starting one there.
+- Music: `.ym <Yandex Music track URL>` resolves a public audio result and sends the file in the current chat. `.ymplaylist set <public Yandex Music playlist URL>` then `.randomtrack` chooses a random playlist entry and sends it as audio.
+- Games: `.flip`, `.dice`, `.ttt`, `.2048`, `.rps`, `.guess`, `.wordly`. Interactive games are inline messages sent from the connected account (`via @control_bot`) in the same chat; enable Inline Mode for the control bot in @BotFather once.
 
 `.kawaii` is persistent for the current chat. Ordinary later outgoing messages are edited; `.kawaii off` disables it. `//message` sends the message without transformation.
 
@@ -104,4 +104,4 @@ Media transcoding, moderation, external weather/currency providers, downloader e
 - Account shows disconnected after restart: Telegram may have revoked the session; reconnect through the control bot.
 - AI unavailable: Kawaii leaves the original outgoing message unchanged. Short messages and explicit `.kawaii local` use the local transformer.
 - Telegram FloodWait: the operation is rate-limited; the process and other users continue running.
-- Interactive game field is not sent: add the control bot to that group and give it permission to post messages. Bot API messages cannot be injected into a private conversation where the bot has never been started.
+- Interactive game is not sent: enable Inline Mode once in @BotFather for the control bot (Bot Settings → Inline Mode). Inline messaging can then work in both private chats and groups.
