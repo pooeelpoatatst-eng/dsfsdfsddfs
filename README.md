@@ -85,15 +85,18 @@ Use PostgreSQL, not SQLite: this project uses PostgreSQL JSONB columns. `DATABAS
 
 ## Implemented commands
 
-- Core: `.help`, `.kawaii`, `.switch` (via `.kawaii`), `.bold`, `.italic`, `.underline`, `.strike`, `.monospace`, `.spoiler`, `.sw`, `.leet`, `.love`, `.type`, `.ping`, `.core`.
-- Automation: per-chat/global kawaii mode, `//` escape, local/AI hybrid transformation, AFK direct-message reply, notes.
-- Games: `.flip`, `.dice`, `.ttt`.
+- Core: `.help`, `.kawaii`, `.switch`, `.bold`, `.italic`, `.underline`, `.strike`, `.monospace`, `.spoiler`, `.sw`, `.leet`, `.love`, `.type`, `.ping`, `.core`.
+- Automation: per-chat/global kawaii mode, `//` escape, local/AI hybrid transformation, AFK direct-message reply and configurable AI replies.
+- Personal AI style: `.afkai prompt <описание>`, `.afkai learn [1-400]`, `.afkai on|off|status`. Learning here means a private style context made from the owner's own chat messages; it is not a model fine-tune.
+- AI tools: `.ai`, `.sum`, `.replyai`, `.rewrite`, `.translate`, `.explain`, `.tasks`, `.planai`, `.proofread`, `.ideas`.
+- Music: `.ym <Yandex Music track URL>` shares a rich track link in the current chat; `.ymplaylist set <public playlist URL>` and `.randomtrack` share a random track from that playlist. Audio files are not downloaded or copied from Yandex Music.
+- Games: `.flip`, `.dice`, `.ttt`, `.2048`, `.rps`, `.guess`, `.wordly`. Interactive games are sent by the control bot, so add it to a group before starting one there.
 
 `.kawaii` is persistent for the current chat. Ordinary later outgoing messages are edited; `.kawaii off` disables it. `//message` sends the message without transformation.
 
 ## Current MVP boundary
 
-The requested media transcoding, profile cloning, filters/reactions, moderation, external weather/currency providers, download endpoint, announcements, 2048/checkers/duel persistence, and the many additional commands are not yet implemented. They are intentionally not registered as fake commands. The foundation includes ffmpeg in Docker, game engine coverage for 2048, SSRF URL validation, repositories, isolated client management, session restore, and AI retry handling for future modules.
+Media transcoding, moderation, external weather/currency providers, downloader endpoints, announcements, persistent game sessions across a process restart, and further games remain outside this version. They are intentionally not registered as fake commands.
 
 ## Troubleshooting
 
@@ -101,3 +104,4 @@ The requested media transcoding, profile cloning, filters/reactions, moderation,
 - Account shows disconnected after restart: Telegram may have revoked the session; reconnect through the control bot.
 - AI unavailable: Kawaii leaves the original outgoing message unchanged. Short messages and explicit `.kawaii local` use the local transformer.
 - Telegram FloodWait: the operation is rate-limited; the process and other users continue running.
+- Interactive game field is not sent: add the control bot to that group and give it permission to post messages. Bot API messages cannot be injected into a private conversation where the bot has never been started.

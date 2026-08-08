@@ -93,27 +93,16 @@ async def loading(context: object) -> None:
         await context.edit(f"⌛ loading\n\n{frame}\n{index * 10}%")
         await asyncio.sleep(1)
 
-@command(name="heart", category="Анимации", description="Анимация сердца.", usage=".heart")
+@command(name="heart", category="Анимации", description="Аккуратная пульсация сердца с подписью.", usage=".heart [текст]")
 async def heart(context: object) -> None:
-    small = """  🩷🩷   🩷🩷
- 🩷🩷🩷 🩷🩷🩷
-  🩷🩷🩷🩷🩷
-   🩷🩷🩷🩷
-    🩷🩷🩷
-     🩷🩷
-      🩷"""
-    large = """   💗💗💗     💗💗💗
- 💗💗💗💗💗 💗💗💗💗💗
-💗💗💗💗💗💗💗💗💗💗💗💗💗
- 💗💗💗💗💗💗💗💗💗💗💗
-  💗💗💗💗💗💗💗💗💗
-   💗💗💗💗💗💗💗
-    💗💗💗💗💗
-     💗💗💗
-      💗"""
-    for frame in (small, large, small, large, small, large, "💖"):
-        await context.edit(frame)
-        await asyncio.sleep(1.4)
+    caption = context.raw_args.strip()[:120]
+    frames = (
+        "  🩷🩷   🩷🩷\n 🩷🩷🩷 🩷🩷🩷\n  🩷🩷🩷🩷🩷\n   🩷🩷🩷🩷\n    🩷🩷🩷\n     🩷🩷\n      🩷",
+        " 💖💖💖   💖💖💖\n💖💖💖💖💖 💖💖💖💖💖\n 💖💖💖💖💖💖💖💖💖\n  💖💖💖💖💖💖💖\n   💖💖💖💖💖\n    💖💖💖\n     💖",
+    )
+    for frame in (frames[0], frames[1], frames[0], "💗"):
+        await context.edit(f"{frame}\n\n{caption}" if caption else frame)
+        await asyncio.sleep(0.85)
 
 @command(name="boom", category="Анимации", description="Мини-взрыв.", usage=".boom")
 async def boom(context: object) -> None:
@@ -121,11 +110,11 @@ async def boom(context: object) -> None:
         await context.edit(frame)
         await asyncio.sleep(2)
 
-@command(name="rainbow", category="Анимации", description="Цветная анимация.", usage=".rainbow <text>")
+@command(name="rainbow", category="Анимации", description="Радужная волна вокруг текста.", usage=".rainbow <text>")
 async def rainbow(context: object) -> None:
-    text = context.raw_args or "rainbow"
-    colors = ("🔴", "🟠", "🟡", "🟢", "🔵", "🟣")
-    for offset in range(10):
-        line = "".join(colors[(index + offset) % len(colors)] for index in range(13))
-        await context.edit(f"{line}\n{text}\n{line}")
-        await asyncio.sleep(1)
+    text = context.raw_args.strip() or "радуга"
+    colors = ("🟥", "🟧", "🟨", "🟩", "🟦", "🟪")
+    for offset in range(6):
+        wave = "".join(colors[(index + offset) % len(colors)] for index in range(9))
+        await context.edit(f"{wave}\n✨ {text} ✨\n{wave[::-1]}")
+        await asyncio.sleep(0.7)

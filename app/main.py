@@ -11,6 +11,7 @@ from app.database.repositories import ModeRepository, SettingsRepository, UsageR
 from app.logging import configure_logging
 from app.services.ai import AIService, OpenAICompatibleProvider
 from app.services.crypto import SessionCrypto
+from app.games.service import GameService
 from app.userbot.client import RuntimeServices
 from app.userbot.factory import TelegramClientFactory
 from app.userbot.manager import UserbotManager
@@ -36,6 +37,9 @@ async def run() -> None:
     manager = UserbotManager(factory, crypto, users, runtime, modes, settings.max_active_clients)
     container = AppContainer(settings, users, crypto, factory, manager, db, {})
     bot, dispatcher = create_bot(container)
+    games = GameService(bot)
+    container.games = games
+    runtime.games = games
     ModuleLoader().load_all()
 
     stop = asyncio.Event()

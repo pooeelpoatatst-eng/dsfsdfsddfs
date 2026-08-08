@@ -26,6 +26,7 @@ class RuntimeServices:
     settings: SettingsRepository
     usage: UsageRepository
     modules: dict[str, bool]
+    games: Any | None = None
 
 
 class UserClient:

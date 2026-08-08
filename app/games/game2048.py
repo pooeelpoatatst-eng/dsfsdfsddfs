@@ -31,3 +31,15 @@ class Game2048:
         changed = self.board != before
         if changed: self.spawn()
         return changed
+
+    def can_move(self) -> bool:
+        if any(cell == 0 for row in self.board for cell in row):
+            return True
+        for row in range(4):
+            for col in range(4):
+                value = self.board[row][col]
+                if row < 3 and self.board[row + 1][col] == value:
+                    return True
+                if col < 3 and self.board[row][col + 1] == value:
+                    return True
+        return False

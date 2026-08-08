@@ -38,6 +38,11 @@ class PendingLogin:
 def create_router(container: object) -> Router:
     router = Router()
 
+    @router.callback_query(F.data.startswith("g:"))
+    async def game_callback(callback: CallbackQuery) -> None:
+        if not container.games or not await container.games.handle_callback(callback):
+            await callback.answer("Игра уже недоступна.", show_alert=True)
+
     async def menu_text(control_id: int) -> tuple[str, bool]:
         user = await container.users.ensure(control_id)
         online = container.manager.is_running(control_id)

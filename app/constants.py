@@ -6,7 +6,7 @@ TRANSFORM_MODES = frozenset({"kawaii", "toxic", "troll", "rp", "leet"})
 DEFAULT_MODULES = {
     "help": True, "kawaii": True, "formatting": True, "tools": True,
     "afk": True, "notes": True, "games": True, "media": True,
-    "profile": True, "chat": True,
+    "profile": True, "chat": True, "music": True, "ai_tools": True,
 }
 AI_DAILY_LIMITS = {"free": 100, "premium": 5000, "admin": None}
 SHORT_LOCAL_WORDS = frozenset({"да", "нет", "ок", "okay", "+", "-", "го", "лол", "ага", "че", "чё"})

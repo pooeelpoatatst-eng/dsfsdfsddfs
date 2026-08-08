@@ -16,6 +16,7 @@ class AppContainer:
     manager: Any
     db: Any
     temp_auth: dict[int, Any]
+    games: Any | None = None
 
 
 def create_bot(container: AppContainer) -> tuple[Bot, Dispatcher]:
