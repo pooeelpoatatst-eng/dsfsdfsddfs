@@ -110,6 +110,8 @@ class UserClient:
             if parsed:
                 await self._execute(event, parsed)
                 return
+            from app.modules.streak import record_message
+            await record_message(self, event, "out")
             await self._transform(event, text)
 
     async def _execute(self, event: Any, parsed: Any) -> None:
@@ -149,6 +151,8 @@ class UserClient:
     async def _on_incoming(self, event: Any) -> None:
         # Incoming automation is intentionally isolated from outgoing transforms.
         if event.sender_id == self.telegram_user_id or not event.raw_text: return
+        from app.modules.streak import record_message
+        await record_message(self, event, "in")
         from app.modules.filters import maybe_reply_filter
         await maybe_reply_filter(self, event)
         from app.modules.swmute import maybe_swmute
