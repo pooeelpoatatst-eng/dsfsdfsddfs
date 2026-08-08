@@ -77,6 +77,7 @@ class UserClient:
     def register_handlers(self) -> None:
         self.client.add_event_handler(self._on_outgoing, events.NewMessage(outgoing=True))
         self.client.add_event_handler(self._on_incoming, events.NewMessage(incoming=True))
+        self.client.add_event_handler(self._on_chat_action, events.ChatAction())
 
     async def health_check(self) -> bool:
         try:
@@ -149,7 +150,13 @@ class UserClient:
         if event.sender_id == self.telegram_user_id or not event.raw_text: return
         from app.modules.filters import maybe_reply_filter
         await maybe_reply_filter(self, event)
+        from app.modules.swmute import maybe_swmute
+        await maybe_swmute(self, event)
         from app.modules.afk import maybe_reply_afk
         await maybe_reply_afk(self, event)
         from app.modules.games import handle_opponent_move
         await handle_opponent_move(self, event)
+
+    async def _on_chat_action(self, event: Any) -> None:
+        from app.modules.welcome import maybe_welcome
+        await maybe_welcome(self, event)
