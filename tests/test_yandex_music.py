@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.yandex_music import YandexMusicError, normalize_yandex_music_url, parse_og_title, parse_track_ids, track_id_from_url, track_title_from_api, validate_yandex_music_url
+from app.services.yandex_music import YandexMusicError, normalize_yandex_music_url, parse_og_title, parse_track_ids, track_id_from_url, track_title_from_api, track_title_from_song_link, validate_yandex_music_url
 
 
 def test_parses_public_page_metadata() -> None:
@@ -24,6 +24,16 @@ def test_accepts_album_track_share_url_and_html_query() -> None:
 def test_parses_track_title_from_public_yandex_api_payload() -> None:
     payload = {"result": [{"title": "Танцуешь", "artists": [{"name": "Locked23"}]}]}
     assert track_title_from_api(payload) == "Locked23 — Танцуешь"
+
+
+def test_parses_track_title_from_song_link_payload() -> None:
+    payload = {
+        "entityUniqueId": "YANDEX_SONG::154249264",
+        "entitiesByUniqueId": {
+            "YANDEX_SONG::154249264": {"title": "Танцуешь", "artistName": "Locked23"},
+        },
+    }
+    assert track_title_from_song_link(payload) == "Locked23 — Танцуешь"
 
 
 def test_parses_nextjs_escaped_meta_title() -> None:

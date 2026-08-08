@@ -74,6 +74,25 @@ def track_title_from_api(data: object) -> str:
     return f"{artist} — {title}"[:240] if artist and title else title[:240]
 
 
+def track_title_from_song_link(data: object) -> str:
+    """Extract the canonical title from Song.link's public URL resolver."""
+    if not isinstance(data, dict):
+        return ""
+    entities = data.get("entitiesByUniqueId")
+    if not isinstance(entities, dict):
+        return ""
+    preferred = entities.get(data.get("entityUniqueId"))
+    candidates = [preferred, *entities.values()] if isinstance(preferred, dict) else list(entities.values())
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        artist = str(item.get("artistName") or "").strip()
+        if title:
+            return f"{artist} — {title}"[:240] if artist else title[:240]
+    return ""
+
+
 def _meta_content(page: str, key: str) -> str:
     for tag in META_TAG_RE.findall(page):
         attrs = {name.lower(): html.unescape(value).strip() for name, _, value in META_ATTRIBUTE_RE.findall(tag)}
@@ -131,6 +150,16 @@ class YandexMusicShareService:
             raise YandexMusicError("Не получилось открыть ссылку Яндекс Музыки.") from exc
         return response.text
 
+    async def _song_link_title(self, url: str) -> str:
+        """Resolve a public music link when Yandex blocks the server region."""
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12), headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
+                response = await client.get("https://api.song.link/v1-alpha.1/links", params={"url": url})
+                response.raise_for_status()
+                return track_title_from_song_link(response.json())
+        except (httpx.HTTPError, ValueError):
+            return ""
+
     async def track(self, url: str) -> SharedTrack:
         url = validate_yandex_music_url(url)
         track_id = track_id_from_url(url)
@@ -152,6 +181,8 @@ class YandexMusicShareService:
                 title = parse_og_title(await self._page(url))
             except YandexMusicError:
                 title = ""
+        if not title:
+            title = await self._song_link_title(url)
         if not title:
             raise YandexMusicError("Не смог прочитать название трека из ссылки. Пришли именно ссылку на трек, не альбом или плейлист.")
         return SharedTrack(url, title)
