@@ -24,3 +24,8 @@ def test_accepts_album_track_share_url_and_html_query() -> None:
 def test_parses_track_title_from_public_yandex_api_payload() -> None:
     payload = {"result": [{"title": "Танцуешь", "artists": [{"name": "Locked23"}]}]}
     assert track_title_from_api(payload) == "Locked23 — Танцуешь"
+
+
+def test_parses_nextjs_escaped_meta_title() -> None:
+    page = r'{\"property\":\"og:title\",\"content\":\"Танцуешь\"}{\"property\":\"og:description\",\"content\":\"Locked23 • Трек\"}'
+    assert parse_og_title(page) == "Locked23 — Танцуешь"

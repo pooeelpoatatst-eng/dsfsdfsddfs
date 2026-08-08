@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -81,9 +82,29 @@ def _meta_content(page: str, key: str) -> str:
     return ""
 
 
+def _rsc_meta_content(page: str, key: str) -> str:
+    """Read Next.js escaped meta tags when normal HTML meta tags are absent."""
+    marker = f'\\"property\\":\\"{key}\\"'
+    position = page.find(marker)
+    if position < 0:
+        return ""
+    content_marker = '\\"content\\":\\"'
+    start = page.find(content_marker, position)
+    if start < 0:
+        return ""
+    raw = page[start + len(content_marker):]
+    match = re.match(r'((?:\\\\.|[^"])*)\\"', raw)
+    if not match:
+        return ""
+    try:
+        return json.loads(f'"{match.group(1)}"').strip()
+    except json.JSONDecodeError:
+        return ""
+
+
 def parse_og_title(page: str) -> str:
-    title = _meta_content(page, "og:title") or _meta_content(page, "twitter:title")
-    description = _meta_content(page, "og:description") or _meta_content(page, "twitter:description")
+    title = _meta_content(page, "og:title") or _rsc_meta_content(page, "og:title") or _meta_content(page, "twitter:title")
+    description = _meta_content(page, "og:description") or _rsc_meta_content(page, "og:description") or _meta_content(page, "twitter:description")
     title = re.sub(r"\s*[—–-]\s*Яндекс Музыка.*$", "", title, flags=re.I).strip()
     artist = description.split("•", 1)[0].strip()
     if title and artist and artist.lower() not in {"трек", title.lower()}:
@@ -116,9 +137,12 @@ class YandexMusicShareService:
         title = ""
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(12), headers={"User-Agent": "Mozilla/5.0 Telegram Userbot"}) as client:
-                response = await client.get(f"https://api.music.yandex.net/tracks/{track_id}")
-                response.raise_for_status()
-                title = track_title_from_api(response.json())
+                for host in ("api.music.yandex.net", "api.music.yandex.ru"):
+                    response = await client.get(f"https://{host}/tracks/{track_id}")
+                    response.raise_for_status()
+                    title = track_title_from_api(response.json())
+                    if title:
+                        break
         except (httpx.HTTPError, ValueError):
             try:
                 title = parse_og_title(await self._page(url))
